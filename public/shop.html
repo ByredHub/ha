@@ -1292,7 +1292,12 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
                 const b = $('ykCheck'); if (b) { b.disabled = true; b.innerHTML = '⏳ Проверяем...'; }
                 try {
                     const r = await post('/api/shop/yookassa/check-payment', { orderId, userId: uid });
-                    if (r.status === 'completed') { cM(); toast('✅ Оплата прошла, подписка активирована!'); setTimeout(() => load(), 500); return }
+                    if (r.status === 'completed') {
+                        cM();
+                        toast(r.orderType === 'topup' ? '✅ Баланс пополнен!' : '✅ Оплата прошла, подписка активирована!');
+                        setTimeout(() => load(), 500);
+                        return
+                    }
                     toast(r.yookassaStatus === 'pending' ? '⏳ Платеж еще обрабатывается' : 'Оплата пока не подтверждена');
                 } catch (e) { toast('❌ Ошибка проверки'); }
                 if (b) { b.disabled = false; b.innerHTML = I.check + ' Проверить оплату'; }
@@ -1324,7 +1329,12 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
                 const b = $('pgCheck'); if (b) { b.disabled = true; b.innerHTML = '⏳ Проверяем...'; }
                 try {
                     const r = await post('/api/shop/platega/check-payment', { orderId, userId: uid });
-                    if (r.status === 'completed') { cM(); toast('✅ Оплата прошла, подписка активирована!'); setTimeout(() => load(), 500); return }
+                    if (r.status === 'completed') {
+                        cM();
+                        toast(r.orderType === 'topup' ? '✅ Баланс пополнен!' : '✅ Оплата прошла, подписка активирована!');
+                        setTimeout(() => load(), 500);
+                        return
+                    }
                     toast(r.plategaStatus === 'PENDING' ? '⏳ Платеж еще обрабатывается' : 'Оплата пока не подтверждена');
                 } catch (e) { toast('❌ Ошибка проверки'); }
                 if (b) { b.disabled = false; b.innerHTML = I.check + ' Проверить оплату'; }
@@ -1380,10 +1390,74 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
 
             function showTU() {
                 const cur = cfg.currency || '₽';
-                oM(`<div class="mo-t">${I.plus} Пополнить баланс</div><div class="sec">${I.wallet} Выберите оплату</div>${payHtml()}
+                const yookassaBlock = cfg.yookassaEnabled ? `<div class="cd"><div class="cd-t">${I.wallet} YooKassa</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">${esc(cfg.yookassaDescription || 'Оплата картой или СБП через YooKassa')}</div></div>
+<button class="btn btn-p" id="tuYK">${I.wallet} Оплатить картой / СБП</button>` : '';
+                const plategaBlock = cfg.plategaEnabled ? `<div class="cd"><div class="cd-t">${I.wallet} Platega</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">${esc(cfg.plategaDescription || 'Оплата картой или СБП через Platega')}</div></div>
+<button class="btn btn-p" id="tuPG">${I.wallet} Оплатить через Platega</button>` : '';
+                const manualBlock = (!cfg.yookassaEnabled && !cfg.plategaEnabled) ? `<div class="sec">${I.wallet} Выберите оплату</div>${payHtml()}
+<button class="btn btn-p" id="tuB">${I.send} Отправить заявку</button>` : '';
+                oM(`<div class="mo-t">${I.plus} Пополнить баланс</div>
 <div class="ig"><div class="il">Сумма (${esc(cur)})</div><input class="inp" type="number" id="tuA" placeholder="500" min="1"></div>
-<button class="btn btn-p" id="tuB">${I.send} Отправить заявку</button><button class="btn btn-o" onclick="cM()">Закрыть</button>`);
-                $('tuB').addEventListener('click', async () => { const a = parseInt($('tuA').value) || 0; if (a <= 0) { toast('Укажите сумму'); return } try { await post('/api/shop/top-up', { userId: uid, amount: a, firstName: uname, paymentMethod: selectedPay() }); cM(); toast('✅ Заявка отправлена') } catch { toast('❌ Ошибка') } })
+${yookassaBlock}${plategaBlock}${manualBlock}<button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                const yk = $('tuYK'); if (yk) yk.addEventListener('click', () => payYooKassaTopUp());
+                const pg = $('tuPG'); if (pg) pg.addEventListener('click', () => payPlategaTopUp());
+                const mb = $('tuB'); if (mb) mb.addEventListener('click', async () => {
+                    const a = parseInt($('tuA').value) || 0;
+                    if (a <= 0) { toast('Укажите сумму'); return }
+                    try { await post('/api/shop/top-up', { userId: uid, amount: a, firstName: uname, paymentMethod: selectedPay() }); cM(); toast('✅ Заявка отправлена') } catch { toast('❌ Ошибка') }
+                })
+            }
+
+            function topUpAmount() {
+                const a = parseInt($('tuA')?.value) || 0;
+                if (a <= 0) toast('Укажите сумму');
+                return a;
+            }
+
+            async function payYooKassaTopUp() {
+                const amount = topUpAmount(); if (amount <= 0) return;
+                const b = $('tuYK'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
+                try {
+                    const r = await post('/api/shop/yookassa/create-top-up', { amount, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname });
+                    if (!r.ok || !r.confirmationUrl) throw new Error(r.error || 'Ошибка платежа');
+                    oM(`<div class="mo-t">${I.wallet} Пополнение баланса</div>
+<div class="cd"><div class="cd-t">${I.check} Платеж создан</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">Откройте оплату, оплатите баланс, затем вернитесь и нажмите проверку.</div></div>
+<button class="btn btn-p" id="ykOpen">${I.wallet} Открыть оплату</button>
+<button class="btn btn-g" id="ykCheck">${I.check} Проверить оплату</button>
+<button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                    $('ykOpen').addEventListener('click', () => {
+                        if (tg && tg.openLink) tg.openLink(r.confirmationUrl);
+                        else window.open(r.confirmationUrl, '_blank');
+                    });
+                    $('ykCheck').addEventListener('click', () => checkYooKassa(r.orderId));
+                    setTimeout(() => $('ykOpen')?.click(), 300);
+                } catch (e) {
+                    toast('❌ ' + (e.message || 'Ошибка'));
+                    b.disabled = false; b.innerHTML = I.wallet + ' Оплатить картой / СБП';
+                }
+            }
+
+            async function payPlategaTopUp() {
+                const amount = topUpAmount(); if (amount <= 0) return;
+                const b = $('tuPG'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
+                try {
+                    const r = await post('/api/shop/platega/create-top-up', { amount, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname });
+                    if (!r.ok || !r.confirmationUrl) throw new Error(r.error || 'Ошибка платежа');
+                    oM(`<div class="mo-t">${I.wallet} Пополнение баланса</div>
+<div class="cd"><div class="cd-t">${I.check} Платеж создан</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">Откройте оплату, оплатите баланс, затем вернитесь и нажмите проверку.</div></div>
+<button class="btn btn-p" id="pgOpen">${I.wallet} Открыть оплату</button>
+<button class="btn btn-g" id="pgCheck">${I.check} Проверить оплату</button>
+<button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                    $('pgOpen').addEventListener('click', () => {
+                        if (tg && tg.openLink) tg.openLink(r.confirmationUrl);
+                        else window.open(r.confirmationUrl, '_blank');
+                    });
+                    $('pgCheck').addEventListener('click', () => checkPlatega(r.orderId));
+                    setTimeout(() => $('pgOpen')?.click(), 300);
+                } catch (e) {
+                    toast('❌ ' + (e.message || 'Ошибка'));
+                    b.disabled = false; b.innerHTML = I.wallet + ' Оплатить через Platega';
+                }
             }
 
             // REFERRALS

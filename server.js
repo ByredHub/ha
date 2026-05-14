@@ -1437,6 +1437,47 @@ async function activateOrder(data, order, options = {}) {
 }
 global.activateOrder = activateOrder;
 
+function activateTopUpOrder(data, order, options = {}) {
+    if (!order || order.status === 'completed') return { alreadyCompleted: true, order };
+    const amount = Number(order.amount || order.price || 0);
+    if (!amount || amount <= 0) throw new Error('Invalid top-up amount');
+
+    if (!data.shopUsers) data.shopUsers = [];
+    let user = data.shopUsers.find(u => u.userId === parseInt(order.userId));
+    if (!user) {
+        user = {
+            userId: parseInt(order.userId),
+            balance: 0,
+            referralCode: generateId().substring(0, 8),
+            balanceHistory: [],
+            createdAt: Date.now()
+        };
+        data.shopUsers.push(user);
+    }
+
+    user.balance = (user.balance || 0) + amount;
+    if (!user.balanceHistory) user.balanceHistory = [];
+    user.balanceHistory.push({
+        amount,
+        description: `Пополнение баланса (${options.source || order.paymentMethod || 'оплата'})`,
+        date: Date.now()
+    });
+
+    order.status = 'completed';
+    order.completedAt = Date.now();
+    order.updatedAt = Date.now();
+    order.balanceAfter = user.balance;
+
+    if (global.happUserBot) {
+        const cur = (data.settings || {}).currency || '₽';
+        global.happUserBot.sendMessage(parseInt(order.chatId || order.userId),
+            `✅ Баланс пополнен!\n\n💰 +${amount} ${cur}\n💳 Баланс: ${user.balance} ${cur}`
+        ).catch(() => { });
+    }
+
+    return { order, user, balance: user.balance };
+}
+
 function generateToken() { return crypto.randomBytes(32).toString('base64url'); }
 function generateId() { return crypto.randomBytes(8).toString('hex'); }
 
@@ -2689,6 +2730,7 @@ async function applyYooKassaPaymentResult(data, order, payment, baseUrl) {
     const actual = payment.amount && payment.amount.value ? Number(payment.amount.value).toFixed(2) : '';
     if (payment.status === 'succeeded') {
         if (actual !== expected) throw new Error(`Payment amount mismatch: expected ${expected}, got ${actual}`);
+        if (order.orderType === 'topup') return activateTopUpOrder(data, order, { source: 'YooKassa' });
         return await activateOrder(data, order, { source: 'YooKassa', baseUrl });
     }
 
@@ -2765,6 +2807,70 @@ app.post('/api/shop/yookassa/create-payment', async (req, res) => {
     }
 });
 
+app.post('/api/shop/yookassa/create-top-up', async (req, res) => {
+    try {
+        const { amount, userId, username, firstName } = req.body;
+        const topUpAmount = Number(amount);
+        if (!userId || !topUpAmount || topUpAmount <= 0) return res.status(400).json({ error: 'Missing data' });
+
+        const data = loadData();
+        const settings = data.settings || {};
+        if (!isYooKassaConfigured(settings)) return res.status(400).json({ error: 'YooKassa is not configured' });
+
+        const order = {
+            id: generateId(),
+            orderType: 'topup',
+            planName: 'Пополнение баланса',
+            amount: topUpAmount,
+            price: topUpAmount,
+            userId: parseInt(userId),
+            chatId: parseInt(userId),
+            username: username || '',
+            firstName: firstName || '',
+            paymentProvider: 'yookassa',
+            paymentMethod: 'YooKassa',
+            status: 'awaiting_payment',
+            createdAt: Date.now()
+        };
+
+        const baseUrl = makePublicUrl(req, data);
+        const payment = await yookassaRequest(settings, 'POST', '/v3/payments', {
+            amount: { value: topUpAmount.toFixed(2), currency: 'RUB' },
+            capture: true,
+            confirmation: {
+                type: 'redirect',
+                return_url: `${baseUrl}/shop.html?topup=${order.id}`
+            },
+            description: `HappVPN: пополнение баланса ${topUpAmount} RUB`,
+            metadata: {
+                orderId: order.id,
+                orderType: 'topup',
+                userId: String(userId)
+            }
+        }, `happvpn-topup-${order.id}`);
+
+        order.yookassaPaymentId = payment.id;
+        order.yookassaStatus = payment.status || '';
+        order.confirmationUrl = payment.confirmation?.confirmation_url || '';
+
+        if (!data.orders) data.orders = [];
+        data.orders.push(order);
+        if (data.orders.length > 500) data.orders = data.orders.slice(-500);
+        saveData(data);
+
+        res.json({
+            ok: true,
+            orderId: order.id,
+            paymentId: order.yookassaPaymentId,
+            confirmationUrl: order.confirmationUrl,
+            status: order.status
+        });
+    } catch (e) {
+        console.log('YooKassa create top-up error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
+});
+
 app.post('/api/shop/yookassa/check-payment', async (req, res) => {
     try {
         const { orderId, userId } = req.body;
@@ -2784,7 +2890,9 @@ app.post('/api/shop/yookassa/check-payment', async (req, res) => {
         res.json({
             ok: true,
             status: order.status,
+            orderType: order.orderType || 'plan',
             yookassaStatus: order.yookassaStatus,
+            balance: result.balance || result.user?.balance || 0,
             subUrl: result.subUrl || ''
         });
     } catch (e) {
@@ -2833,6 +2941,7 @@ async function applyPlategaPaymentResult(data, order, payment, baseUrl) {
 
     if (payment.status === 'CONFIRMED') {
         if (actual !== expected) throw new Error(`Payment amount mismatch: expected ${expected}, got ${actual}`);
+        if (order.orderType === 'topup') return activateTopUpOrder(data, order, { source: 'Platega' });
         return await activateOrder(data, order, { source: 'Platega', baseUrl });
     }
 
@@ -2915,6 +3024,69 @@ app.post('/api/shop/platega/create-payment', async (req, res) => {
     }
 });
 
+app.post('/api/shop/platega/create-top-up', async (req, res) => {
+    try {
+        const { amount, userId, username, firstName } = req.body;
+        const topUpAmount = Number(amount);
+        if (!userId || !topUpAmount || topUpAmount <= 0) return res.status(400).json({ error: 'Missing data' });
+
+        const data = loadData();
+        const settings = data.settings || {};
+        if (!isPlategaConfigured(settings)) return res.status(400).json({ error: 'Platega is not configured' });
+
+        const order = {
+            id: generateId(),
+            orderType: 'topup',
+            planName: 'Пополнение баланса',
+            amount: topUpAmount,
+            price: topUpAmount,
+            userId: parseInt(userId),
+            chatId: parseInt(userId),
+            username: username || '',
+            firstName: firstName || '',
+            paymentProvider: 'platega',
+            paymentMethod: 'Platega',
+            status: 'awaiting_payment',
+            createdAt: Date.now()
+        };
+
+        const baseUrl = makePublicUrl(req, data);
+        const payload = JSON.stringify({ orderId: order.id, orderType: 'topup', userId: String(userId) });
+        const payment = await plategaRequest(settings, 'POST', '/transaction/process', {
+            paymentMethod: parseInt(settings.plategaPaymentMethod) || 11,
+            paymentDetails: {
+                amount: topUpAmount,
+                currency: 'RUB'
+            },
+            description: `HappVPN balance top-up UserId:${parseInt(userId)}`,
+            return: `${baseUrl}/shop.html?topup=${order.id}`,
+            failedUrl: `${baseUrl}/shop.html?topup=${order.id}&failed=1`,
+            payload
+        });
+
+        order.plategaTransactionId = payment.transactionId;
+        order.plategaStatus = payment.status || '';
+        order.confirmationUrl = payment.redirect || '';
+        if (!order.plategaTransactionId || !order.confirmationUrl) throw new Error('Platega did not return payment link');
+
+        if (!data.orders) data.orders = [];
+        data.orders.push(order);
+        if (data.orders.length > 500) data.orders = data.orders.slice(-500);
+        saveData(data);
+
+        res.json({
+            ok: true,
+            orderId: order.id,
+            paymentId: order.plategaTransactionId,
+            confirmationUrl: order.confirmationUrl,
+            status: order.status
+        });
+    } catch (e) {
+        console.log('Platega create top-up error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
+});
+
 app.post('/api/shop/platega/check-payment', async (req, res) => {
     try {
         const { orderId, userId } = req.body;
@@ -2934,7 +3106,9 @@ app.post('/api/shop/platega/check-payment', async (req, res) => {
         res.json({
             ok: true,
             status: order.status,
+            orderType: order.orderType || 'plan',
             plategaStatus: order.plategaStatus,
+            balance: result.balance || result.user?.balance || 0,
             subUrl: result.subUrl || ''
         });
     } catch (e) {
