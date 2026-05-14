@@ -35,7 +35,7 @@ function getAdminPath() {
 const ADMIN_PATH = getAdminPath();
 
 // ===== MIDDLEWARE =====
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
@@ -100,6 +100,7 @@ app.get('/api/auth-check', (req, res) => {
 
 // Static files — served ONLY under secret admin path
 app.use(`/${ADMIN_PATH}`, express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // === FAKE COVER SITE — ТСПУ/кто угодно видит обычный сайт ===
 app.get('/', (req, res) => {
@@ -2418,14 +2419,22 @@ app.post('/api/upload-photo', authMiddleware, (req, res) => {
     try {
         const matches = image.match(/^data:image\/(.*?);base64,(.+)$/);
         if (!matches) return res.status(400).json({ error: 'Invalid format' });
-        const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+        const safeField = ['shopWelcomePhoto'].includes(field) ? field : 'shopWelcomePhoto';
+        const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1].toLowerCase();
+        if (!['jpg', 'png', 'webp', 'gif'].includes(ext)) return res.status(400).json({ error: 'Unsupported image format' });
         const buf = Buffer.from(matches[2], 'base64');
-        const fname = `${field || 'photo'}_${Date.now()}.${ext}`;
-        fs.writeFileSync(path.join(UPLOADS_DIR, fname), buf);
-        // Save to settings
+        if (buf.length > 10 * 1024 * 1024) return res.status(400).json({ error: 'Image is too large (max 10 MB)' });
+
         const data = loadData();
         if (!data.settings) data.settings = {};
-        data.settings[field || 'shopWelcomePhoto'] = `/uploads/${fname}`;
+        const oldUrl = data.settings[safeField] || '';
+        if (oldUrl.startsWith('/uploads/')) {
+            try { fs.unlinkSync(path.join(__dirname, 'public', oldUrl)); } catch { }
+        }
+
+        const fname = `${safeField}_${Date.now()}.${ext}`;
+        fs.writeFileSync(path.join(UPLOADS_DIR, fname), buf);
+        data.settings[safeField] = `/uploads/${fname}`;
         saveData(data);
         res.json({ url: `/uploads/${fname}` });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -2433,11 +2442,12 @@ app.post('/api/upload-photo', authMiddleware, (req, res) => {
 
 app.delete('/api/upload-photo', authMiddleware, (req, res) => {
     const { field } = req.body;
+    const safeField = ['shopWelcomePhoto'].includes(field) ? field : 'shopWelcomePhoto';
     const data = loadData();
-    if (data.settings && data.settings[field || 'shopWelcomePhoto']) {
-        const oldPath = path.join(__dirname, 'public', data.settings[field || 'shopWelcomePhoto']);
+    if (data.settings && data.settings[safeField]) {
+        const oldPath = path.join(__dirname, 'public', data.settings[safeField]);
         try { fs.unlinkSync(oldPath); } catch { }
-        data.settings[field || 'shopWelcomePhoto'] = '';
+        data.settings[safeField] = '';
         saveData(data);
     }
     res.json({ ok: true });

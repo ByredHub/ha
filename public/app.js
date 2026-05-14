@@ -116,6 +116,7 @@
     // ===== HELPERS =====
     function parseVlessName(uri) { if (!uri) return '—'; const h = uri.lastIndexOf('#'); if (h === -1) return '—'; try { return decodeURIComponent(uri.substring(h + 1)) || '—'; } catch { return uri.substring(h + 1) || '—'; } }
     function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function uploadPreviewUrl(url) { return url ? `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}` : ''; }
     function copyToClipboard(text) { if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => fallbackCopy(text)); else fallbackCopy(text); }
     window.copyToClipboard = copyToClipboard;
     function fallbackCopy(text) { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch { } document.body.removeChild(ta); }
@@ -848,7 +849,7 @@
         // Welcome photo preview
         if ($('#welcomePhotoPreview')) {
             if (settings.shopWelcomePhoto) {
-                $('#welcomePhotoPreview').src = settings.shopWelcomePhoto;
+                $('#welcomePhotoPreview').src = uploadPreviewUrl(settings.shopWelcomePhoto);
                 $('#welcomePhotoPreview').style.display = 'block';
                 if ($('#btnRemoveWelcomePhoto')) $('#btnRemoveWelcomePhoto').style.display = '';
             } else {
@@ -1124,19 +1125,23 @@
         if ($('#settingShopWelcomePhoto')) $('#settingShopWelcomePhoto').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            if (!file.type.startsWith('image/')) { showToast('Выберите изображение', 'error'); e.target.value = ''; return; }
+            if (file.size > 10 * 1024 * 1024) { showToast('Фото слишком большое, максимум 10 МБ', 'error'); e.target.value = ''; return; }
             const reader = new FileReader();
             reader.onload = async () => {
                 try {
                     const res = await api('POST', '/api/upload-photo', { image: reader.result, field: 'shopWelcomePhoto' });
                     if (res.url) {
                         settings.shopWelcomePhoto = res.url;
-                        $('#welcomePhotoPreview').src = res.url;
+                        $('#welcomePhotoPreview').src = uploadPreviewUrl(res.url);
                         $('#welcomePhotoPreview').style.display = 'block';
                         if ($('#btnRemoveWelcomePhoto')) $('#btnRemoveWelcomePhoto').style.display = '';
                         showToast('Фото загружено', 'success');
                     }
                 } catch (err) { showToast(err.message, 'error'); }
+                e.target.value = '';
             };
+            reader.onerror = () => { showToast('Не удалось прочитать фото', 'error'); e.target.value = ''; };
             reader.readAsDataURL(file);
         });
         if ($('#btnRemoveWelcomePhoto')) $('#btnRemoveWelcomePhoto').addEventListener('click', async () => {
