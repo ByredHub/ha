@@ -4,6 +4,34 @@
     let templates = [], subs = [], settings = {}, plans = [], currentSub = null, shopUsers = [], currentUserId = null, mtproxies = [], waproxies = [];
     const $ = sel => document.querySelector(sel);
     const $$ = sel => document.querySelectorAll(sel);
+    const PAYMENT_PROVIDER_PRESETS = [
+        { id: 'telegram_stars', name: 'Telegram Stars', methods: 'Звёзды Telegram', currency: 'XTR', hint: 'Оплата звёздами Telegram. Укажите инструкцию или ссылку на бота.' },
+        { id: 'yookassa', name: 'YooKassa', methods: 'Карты, СБП', currency: 'RUB', hint: 'YooKassa: ссылка на оплату или инструкция для ручной проверки.' },
+        { id: 'yookassa_sbp', name: 'YooKassa СБП', methods: 'Система быстрых платежей', currency: 'RUB', hint: 'СБП через YooKassa: укажите ссылку/QR или инструкцию.' },
+        { id: 'cryptobot', name: 'CryptoBot', methods: 'USDT, TON, BTC, ETH', currency: 'Crypto', hint: 'CryptoBot: укажите ссылку на invoice/бота и комментарий к платежу.' },
+        { id: 'heleket', name: 'Heleket', methods: 'USDT, мульти-сеть', currency: 'Crypto', hint: 'Heleket: укажите сеть, адрес или ссылку на оплату.' },
+        { id: 'cloudpayments', name: 'CloudPayments', methods: 'Карты, 3D-Secure', currency: 'RUB', hint: 'CloudPayments: укажите ссылку на платежную форму.' },
+        { id: 'freekassa', name: 'Freekassa', methods: 'NSPK СБП, карты', currency: 'RUB', hint: 'FreeKassa: укажите платежную ссылку или инструкцию.' },
+        { id: 'kassa_ai', name: 'Kassa AI', methods: 'СБП, карты, SberPay', currency: 'RUB', hint: 'Kassa AI: укажите ссылку/инструкцию.' },
+        { id: 'paypalych', name: 'PayPalych (Pal24)', methods: 'Карты, СБП', currency: 'RUB', hint: 'PayPalych: укажите ссылку/инструкцию.' },
+        { id: 'platega', name: 'Platega', methods: 'Карты, СБП, крипто', currency: 'RUB', hint: 'Platega: укажите ссылку/инструкцию.' },
+        { id: 'wata', name: 'WATA', methods: 'СБП, карты', currency: 'RUB', hint: 'WATA: укажите ссылку/инструкцию.' },
+        { id: 'mulenpay', name: 'MulenPay', methods: 'Карты', currency: 'RUB', hint: 'MulenPay: укажите ссылку/инструкцию.' },
+        { id: 'riopay', name: 'RioPay', methods: 'Карты', currency: 'RUB', hint: 'RioPay: укажите ссылку/инструкцию.' },
+        { id: 'severpay', name: 'SeverPay', methods: 'СБП, карты', currency: 'RUB', hint: 'SeverPay: укажите ссылку/инструкцию.' },
+        { id: 'paypear', name: 'PayPear', methods: 'Карты, СБП, SberPay, T-Pay', currency: 'RUB', hint: 'PayPear: укажите ссылку/инструкцию.' },
+        { id: 'rollypay', name: 'RollyPay', methods: 'СБП, карты, крипто', currency: 'RUB → USDT', hint: 'RollyPay: укажите ссылку/инструкцию.' },
+        { id: 'aurapay', name: 'AuraPay', methods: 'Карты, СБП', currency: 'RUB', hint: 'AuraPay: укажите ссылку/инструкцию.' },
+        { id: 'overpay', name: 'Overpay', methods: 'Карты, СБП', currency: 'RUB', hint: 'Overpay: укажите ссылку/инструкцию.' },
+        { id: 'antilopay', name: 'Antilopay', methods: 'Карты, СБП, SberPay', currency: 'RUB', hint: 'Antilopay: укажите ссылку/инструкцию.' },
+        { id: 'etoplatezhi', name: 'Etoplatezhi', methods: 'Карты, СБП', currency: 'RUB', hint: 'Etoplatezhi: укажите ссылку/инструкцию.' },
+        { id: 'jupiter', name: 'Jupiter', methods: 'СБП через QR', currency: 'RUB', hint: 'Jupiter: укажите QR/ссылку и инструкцию.' },
+        { id: 'donut', name: 'Donut', methods: 'Карты, СБП по телефону, СБП QR', currency: 'RUB', hint: 'Donut: укажите ссылку/инструкцию.' },
+        { id: 'lava_business', name: 'Lava Business', methods: 'Карты, СБП', currency: 'RUB', hint: 'Lava Business: укажите gate.lava.ru ссылку или инструкцию.' },
+        { id: 'apple_iap', name: 'Apple In-App Purchase', methods: 'Покупки через iOS App Store', currency: 'USD', hint: 'Apple IAP: укажите инструкцию для iOS-покупки.' },
+        { id: 'tribute', name: 'Tribute', methods: 'Telegram-платежи', currency: 'RUB', hint: 'Tribute: укажите ссылку на оплату.' },
+        { id: 'manual_card', name: 'Перевод на карту', methods: 'Карта, СБП', currency: 'RUB', hint: '💳 Банк: 2202 XXXX XXXX XXXX\nИмя получателя: Иванов И.И.\nКомментарий: ваш Telegram username' }
+    ];
 
     // ===== API =====
     async function api(method, url, body = null) {
@@ -645,6 +673,105 @@
         } catch { $('#subDevicesList').innerHTML = '<div class="empty-hint">Ошибка</div>'; }
     }
 
+    // ===== PAYMENT METHODS =====
+    function getPaymentMethodsForSettings() {
+        if (Array.isArray(settings.paymentMethods) && settings.paymentMethods.length) {
+            return settings.paymentMethods.map((m, i) => ({
+                id: m.id || `method_${i}`,
+                provider: m.provider || m.id || 'custom',
+                name: m.name || m.title || 'Способ оплаты',
+                methods: m.methods || '',
+                currency: m.currency || settings.currency || '₽',
+                info: m.info || '',
+                enabled: m.enabled !== false
+            }));
+        }
+        if (settings.paymentMethod || settings.paymentInfo) {
+            return [{
+                id: 'manual_card',
+                provider: 'manual_card',
+                name: settings.paymentMethod || 'Перевод на карту',
+                methods: 'Карта, СБП',
+                currency: settings.currency || '₽',
+                info: settings.paymentInfo || '',
+                enabled: true
+            }];
+        }
+        return [];
+    }
+
+    function renderPaymentMethodsSettings() {
+        const list = $('#paymentMethodsList');
+        const select = $('#paymentPresetSelect');
+        if (!list) return;
+        if (select && !select.dataset.ready) {
+            select.innerHTML = '<option value="">Выбрать из списка...</option>' + PAYMENT_PROVIDER_PRESETS.map(p =>
+                `<option value="${p.id}">${escapeHtml(p.name)} — ${escapeHtml(p.methods)} (${escapeHtml(p.currency)})</option>`
+            ).join('');
+            select.dataset.ready = '1';
+        }
+        const methods = getPaymentMethodsForSettings();
+        list.innerHTML = methods.length ? methods.map((m, i) => `
+            <div class="payment-method-item" data-pay-idx="${i}">
+                <div class="payment-method-head">
+                    <label class="payment-method-enabled">
+                        <input type="checkbox" class="pay-enabled" ${m.enabled ? 'checked' : ''}> Вкл.
+                    </label>
+                    <div class="payment-method-title">${escapeHtml(m.name)}</div>
+                    <button type="button" class="btn-outline btn-sm btn-danger pay-remove" data-pay-remove="${i}">Удалить</button>
+                </div>
+                <div class="payment-method-grid">
+                    <input type="text" class="form-input pay-name" value="${escapeHtml(m.name)}" placeholder="Название">
+                    <input type="text" class="form-input pay-methods" value="${escapeHtml(m.methods)}" placeholder="Методы: карты, СБП">
+                    <input type="text" class="form-input pay-currency" value="${escapeHtml(m.currency)}" placeholder="Валюта">
+                </div>
+                <textarea class="form-input form-textarea pay-info" rows="3" placeholder="Реквизиты, ссылка или инструкция">${escapeHtml(m.info)}</textarea>
+                <input type="hidden" class="pay-provider" value="${escapeHtml(m.provider)}">
+            </div>
+        `).join('') : '<div class="empty-hint" style="padding:12px">Способы оплаты не добавлены. Старые реквизиты ниже продолжат работать как fallback.</div>';
+
+        list.querySelectorAll('[data-pay-remove]').forEach(btn => btn.addEventListener('click', () => {
+            const next = collectPaymentMethodsFromUI();
+            next.splice(parseInt(btn.dataset.payRemove), 1);
+            settings.paymentMethods = next;
+            renderPaymentMethodsSettings();
+        }));
+    }
+
+    function collectPaymentMethodsFromUI() {
+        const list = $('#paymentMethodsList');
+        if (!list) return getPaymentMethodsForSettings();
+        return [...list.querySelectorAll('.payment-method-item')].map((el, i) => ({
+            id: el.querySelector('.pay-provider')?.value || `custom_${i}`,
+            provider: el.querySelector('.pay-provider')?.value || 'custom',
+            name: el.querySelector('.pay-name')?.value.trim() || 'Способ оплаты',
+            methods: el.querySelector('.pay-methods')?.value.trim() || '',
+            currency: el.querySelector('.pay-currency')?.value.trim() || '',
+            info: el.querySelector('.pay-info')?.value.trim() || '',
+            enabled: !!el.querySelector('.pay-enabled')?.checked
+        })).filter(m => m.name || m.info);
+    }
+
+    function addPaymentMethodFromPreset() {
+        const select = $('#paymentPresetSelect');
+        if (!select || !select.value) return;
+        const preset = PAYMENT_PROVIDER_PRESETS.find(p => p.id === select.value);
+        if (!preset) return;
+        const methods = collectPaymentMethodsFromUI();
+        methods.push({
+            id: preset.id,
+            provider: preset.id,
+            name: preset.name,
+            methods: preset.methods,
+            currency: preset.currency,
+            info: preset.hint,
+            enabled: true
+        });
+        settings.paymentMethods = methods;
+        select.value = '';
+        renderPaymentMethodsSettings();
+    }
+
     // ===== SETTINGS =====
     function loadSettingsUI() {
         $('#settingTitle').value = settings.title || ''; $('#settingDesc').value = settings.description || '';
@@ -679,6 +806,7 @@
         if ($('#settingDevicePrice')) $('#settingDevicePrice').value = settings.devicePrice || '';
         if ($('#settingPaymentMethod')) $('#settingPaymentMethod').value = settings.paymentMethod || '';
         if ($('#settingPaymentInfo')) $('#settingPaymentInfo').value = settings.paymentInfo || '';
+        renderPaymentMethodsSettings();
         if ($('#settingUserBotWelcome')) $('#settingUserBotWelcome').value = settings.userBotWelcome || '';
         if ($('#settingShopWelcomeShort')) $('#settingShopWelcomeShort').value = settings.shopWelcomeShort || '';
         if ($('#settingUserBotLink')) $('#settingUserBotLink').value = settings.userBotLink || '';
@@ -723,6 +851,7 @@
             devicePrice: $('#settingDevicePrice') ? parseFloat($('#settingDevicePrice').value) || 0 : 0,
             paymentMethod: $('#settingPaymentMethod') ? $('#settingPaymentMethod').value.trim() : '',
             paymentInfo: $('#settingPaymentInfo') ? $('#settingPaymentInfo').value.trim() : '',
+            paymentMethods: collectPaymentMethodsFromUI(),
             userBotWelcome: $('#settingUserBotWelcome') ? $('#settingUserBotWelcome').value.trim() : '',
             shopWelcomeShort: $('#settingShopWelcomeShort') ? $('#settingShopWelcomeShort').value.trim() : '',
             userBotLink: $('#settingUserBotLink') ? $('#settingUserBotLink').value.trim() : '',
@@ -866,6 +995,7 @@
                         <span style="font-weight:600">${st}</span>
                         <span>${escapeHtml(o.planName || '?')}</span>
                         <span style="color:var(--primary)">${o.price || 0} ${escapeHtml(settings.currency || '₽')}</span>
+                        ${o.paymentMethod ? `<span style="color:var(--text-tertiary);font-size:0.75rem">💳 ${escapeHtml(o.paymentMethod)}</span>` : ''}
                         <span style="color:var(--text-tertiary);font-size:0.75rem">@${escapeHtml(o.username || 'n/a')}</span>
                         <span style="color:var(--text-tertiary);font-size:0.75rem">${date}</span>
                     </div>
@@ -921,6 +1051,7 @@
         // Plans
         if ($('#btnAddPlan')) $('#btnAddPlan').addEventListener('click', openCreatePlan);
         if ($('#btnSavePlan')) $('#btnSavePlan').addEventListener('click', handleSavePlan);
+        if ($('#btnAddPaymentMethod')) $('#btnAddPaymentMethod').addEventListener('click', addPaymentMethodFromPreset);
 
         // Welcome photo upload
         if ($('#settingShopWelcomePhoto')) $('#settingShopWelcomePhoto').addEventListener('change', async (e) => {

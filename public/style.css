@@ -1168,6 +1168,49 @@ body {
     margin-bottom: 14px;
 }
 
+.payment-methods-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.payment-method-item {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.payment-method-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.payment-method-title {
+    flex: 1;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.payment-method-enabled {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    margin: 0 !important;
+    font-size: 0.75rem !important;
+}
+
+.payment-method-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1.3fr 0.7fr;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
 .form-group label {
     display: block;
     font-size: 0.78rem;
@@ -2013,6 +2056,7 @@ body {
     font-size: 1.5rem;
     font-weight: 700;
     background: var(--accent-gradient);
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 4px;
@@ -3337,6 +3381,14 @@ body {
 
     .settings-card h3 {
         font-size: 0.9rem;
+    }
+
+    .payment-method-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .payment-method-head {
+        flex-wrap: wrap;
     }
 
     .form-row {

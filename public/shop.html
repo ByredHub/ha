@@ -131,6 +131,7 @@
             font-weight: 800;
             letter-spacing: -.03em;
             background: var(--gr);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent
         }
@@ -289,6 +290,7 @@
 
         .gt {
             background: var(--gr);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent
         }
@@ -1165,6 +1167,23 @@
 
             function oM(h) { $('moB').innerHTML = h; $('mo').classList.add('on') }
             function cM() { $('mo').classList.remove('on') }
+            function payMs() {
+                const list = Array.isArray(cfg.paymentMethods) ? cfg.paymentMethods.filter(m => m && m.enabled !== false) : [];
+                if (list.length) return list;
+                return [{ id: 'manual_card', name: cfg.paymentMethod || 'Оплата', methods: '', currency: cfg.currency || '₽', info: cfg.paymentInfo || 'Реквизиты не заданы' }];
+            }
+            function payHtml() {
+                const list = payMs();
+                return list.map((m, i) => `<label class="cd" style="display:block;cursor:pointer;margin-bottom:8px">
+<div style="display:flex;align-items:flex-start;gap:10px">
+<input type="radio" name="payM" value="${esc(m.name)}" ${i === 0 ? 'checked' : ''} style="margin-top:3px">
+<div style="flex:1">
+<div class="cd-t" style="margin-bottom:4px">${I.wallet} ${esc(m.name || 'Оплата')}</div>
+${m.methods ? `<div style="font-size:.72rem;color:var(--t3);margin-bottom:6px">${esc(m.methods)}${m.currency ? ' · ' + esc(m.currency) : ''}</div>` : ''}
+<div style="font-size:.84rem;line-height:1.6;white-space:pre-wrap">${esc(m.info || 'Реквизиты не заданы')}</div>
+</div></div></label>`).join('');
+            }
+            function selectedPay() { return document.querySelector('input[name="payM"]:checked')?.value || (payMs()[0]?.name || '') }
             $('mo').addEventListener('click', e => { if (e.target === $('mo')) cM() });
             let ty = 0; $('moS').addEventListener('touchstart', e => { ty = e.touches[0].clientY });
             $('moS').addEventListener('touchmove', e => { if (e.touches[0].clientY - ty > 50) cM() });
@@ -1227,12 +1246,12 @@ ${p.description ? `<div class="cd"><div style="font-size:.84rem;color:var(--t2)"
 <div class="cd"><div class="cd-t">${I.check} Что входит</div><div style="font-size:.84rem;color:var(--t2);line-height:1.8">${I.zap} Высокая скорость<br>${I.shield} Без логов<br>${I.link} Обход блокировок</div></div>
 ${canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wallet} Баланс</div><div style="font-size:.9rem;font-weight:700;color:var(--gn)">Достаточно: ${bal} ${esc(cur)}</div></div>
 <button class="btn btn-g" id="bBuy" data-id="${p.id}">${I.check} Купить с баланса</button>`
-                        : `<div class="cd"><div class="cd-t">${I.wallet} Оплата</div><div style="font-size:.86rem;line-height:1.6;white-space:pre-wrap">${esc(cfg.paymentInfo || 'Реквизиты не заданы')}</div></div>
+                        : `<div class="sec">${I.wallet} Выберите оплату</div>${payHtml()}
 <p style="font-size:.72rem;color:var(--t3);text-align:center;margin:8px 0">После оплаты отправьте скриншот боту</p>
 <button class="btn btn-p" id="bPay" data-id="${p.id}">${I.send} Я оплатил</button>`}
 <button class="btn btn-o" onclick="cM()">Закрыть</button>`);
                 const bb = $('bBuy'); if (bb) bb.addEventListener('click', () => buyBal(p));
-                const bp = $('bPay'); if (bp) bp.addEventListener('click', () => mkOrd(p))
+                const bp = $('bPay'); if (bp) bp.addEventListener('click', () => mkOrd(p, selectedPay()))
             }
 
             async function buyBal(p) {
@@ -1240,8 +1259,9 @@ ${canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wall
                 try { const r = await post('/api/shop/buy-with-balance', { planId: p.id, userId: uid }); if (r.ok) { cM(); toast('✅ Подписка активирована!'); ud.balance = r.balance; setTimeout(() => load(), 500) } } catch { toast('❌ Ошибка'); b.disabled = false; b.innerHTML = I.check + ' Купить с баланса' }
             }
 
-            async function mkOrd(p) {
+            async function mkOrd(p, paymentMethod) {
                 oM(`<div class="mo-t">${I.check} Подтверждение оплаты</div>
+<div class="cd"><div class="cd-t">${I.wallet} ${esc(paymentMethod || 'Оплата')}</div><div style="font-size:.78rem;color:var(--t2)">Прикрепите чек по выбранному способу оплаты.</div></div>
 <div class="cd" style="text-align:center;padding:16px">
 <div style="font-size:.9rem;font-weight:700;margin-bottom:8px">📸 Прикрепите чек об оплате</div>
 <div style="font-size:.78rem;color:var(--t2);margin-bottom:12px">Сделайте скриншот или фото чека</div>
@@ -1268,7 +1288,7 @@ ${canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wall
                     if (!receiptData) { toast('Прикрепите чек'); return }
                     btn.disabled = true; btn.innerHTML = '⏳ Отправляем...';
                     try {
-                        await post('/api/shop/create-order', { planId: p.id, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname, receipt: receiptData });
+                        await post('/api/shop/create-order', { planId: p.id, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname, receipt: receiptData, paymentMethod });
                         cM(); toast('✅ Заказ создан! Ожидайте подтверждения.'); setTimeout(() => load(), 500)
                     } catch { toast('❌ Ошибка'); btn.disabled = false; btn.innerHTML = I.send + ' Отправить чек' }
                 }
@@ -1289,10 +1309,10 @@ ${canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wall
 
             function showTU() {
                 const cur = cfg.currency || '₽';
-                oM(`<div class="mo-t">${I.plus} Пополнить баланс</div><div class="cd"><div class="cd-t">${I.wallet} ${esc(cfg.paymentMethod || 'Оплата')}</div><div style="font-size:.86rem;white-space:pre-wrap;line-height:1.6">${esc(cfg.paymentInfo || 'Реквизиты не заданы')}</div></div>
+                oM(`<div class="mo-t">${I.plus} Пополнить баланс</div><div class="sec">${I.wallet} Выберите оплату</div>${payHtml()}
 <div class="ig"><div class="il">Сумма (${esc(cur)})</div><input class="inp" type="number" id="tuA" placeholder="500" min="1"></div>
 <button class="btn btn-p" id="tuB">${I.send} Отправить заявку</button><button class="btn btn-o" onclick="cM()">Закрыть</button>`);
-                $('tuB').addEventListener('click', async () => { const a = parseInt($('tuA').value) || 0; if (a <= 0) { toast('Укажите сумму'); return } try { await post('/api/shop/top-up', { userId: uid, amount: a, firstName: uname }); cM(); toast('✅ Заявка отправлена') } catch { toast('❌ Ошибка') } })
+                $('tuB').addEventListener('click', async () => { const a = parseInt($('tuA').value) || 0; if (a <= 0) { toast('Укажите сумму'); return } try { await post('/api/shop/top-up', { userId: uid, amount: a, firstName: uname, paymentMethod: selectedPay() }); cM(); toast('✅ Заявка отправлена') } catch { toast('❌ Ошибка') } })
             }
 
             // REFERRALS

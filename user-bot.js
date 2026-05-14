@@ -33,6 +33,184 @@ function esc(text) {
     return String(text).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, '\\$&');
 }
 
+function ensureShopUser(data, from) {
+    if (!data.shopUsers) data.shopUsers = [];
+    let user = data.shopUsers.find(u => u.userId === from.id);
+    if (!user) {
+        user = {
+            userId: from.id,
+            balance: 0,
+            referralCode: generateId().substring(0, 8),
+            balanceHistory: [],
+            createdAt: Date.now()
+        };
+        data.shopUsers.push(user);
+    }
+    if (from.first_name) user.firstName = from.first_name;
+    if (from.username) user.username = from.username;
+    if (!user.referralCode) user.referralCode = generateId().substring(0, 8);
+    return user;
+}
+
+function getUserSubscriptions(data, userId) {
+    return (data.subscriptions || []).filter(s => s.telegramUsers && s.telegramUsers.includes(userId));
+}
+
+function getActiveSubscription(data, userId) {
+    const subs = getUserSubscriptions(data, userId);
+    return subs.find(s => s.enabled !== false && (!s.expiresAt || Date.now() < s.expiresAt)) || subs[0] || null;
+}
+
+function formatDate(ts) {
+    if (!ts) return 'Бессрочно';
+    return new Date(ts).toLocaleDateString('ru-RU');
+}
+
+function formatDaysLeft(ts) {
+    if (!ts) return '∞';
+    const days = Math.ceil((ts - Date.now()) / 86400000);
+    return days > 0 ? `${days} дн.` : 'истекла';
+}
+
+function getSubscriptionStatus(sub) {
+    if (!sub) return 'Нет подписки';
+    if (sub.enabled === false) return 'Отключена';
+    if (sub.expiresAt && Date.now() > sub.expiresAt) return 'Истекла';
+    return 'Активна';
+}
+
+function buildUserKeyboard(webAppUrl, cfg, active = 'home') {
+    const keyboard = [
+        [
+            { text: active === 'cabinet' ? '✅ Кабинет' : '🧑‍💻 Кабинет', callback_data: 'user:cabinet' },
+            { text: '🛒 Магазин', web_app: { url: webAppUrl } }
+        ],
+        [
+            { text: active === 'gift' ? '✅ Подарить подписку' : '🤝 Подарить подписку', callback_data: 'user:gift' }
+        ],
+        [
+            { text: active === 'info' ? '✅ Инфо' : '❓ Инфо', callback_data: 'user:info' }
+        ]
+    ];
+    if (cfg.supportUrl) keyboard.push([{ text: '💬 Поддержка', url: cfg.supportUrl }]);
+    if (active !== 'home') keyboard.push([{ text: '⬅️ Назад', callback_data: 'user:home' }]);
+    return { inline_keyboard: keyboard };
+}
+
+function buildUserHome(data, from, webAppUrl) {
+    const cfg = data.settings || {};
+    const shopName = cfg.shopName || cfg.title || 'HappVPN';
+    const user = ensureShopUser(data, from);
+    const sub = getActiveSubscription(data, from.id);
+    const status = getSubscriptionStatus(sub);
+    const plan = sub ? sub.name : 'не выбран';
+    const left = sub ? formatDaysLeft(sub.expiresAt) : '—';
+    const balance = user.balance || 0;
+    const cur = cfg.currency || '₽';
+
+    const text =
+        `🛡 *${esc(shopName)}*\n\n` +
+        `👤 ${esc(from.first_name || user.firstName || 'Пользователь')}\n\n` +
+        `📋 Подписка: *${esc(status)}*\n` +
+        `📦 Тариф: *${esc(plan)}*\n` +
+        `📅 Осталось: *${esc(left)}*\n` +
+        `💰 Баланс: *${esc(String(balance))} ${esc(cur)}*\n\n` +
+        `Выберите действие:`;
+
+    return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'home') };
+}
+
+function buildCabinetScreen(data, from, webAppUrl) {
+    const cfg = data.settings || {};
+    const user = ensureShopUser(data, from);
+    const sub = getActiveSubscription(data, from.id);
+    const cur = cfg.currency || '₽';
+
+    if (!sub) {
+        return {
+            text:
+                `🧑‍💻 *Кабинет*\n\n` +
+                `👤 ${esc(from.first_name || user.firstName || 'Пользователь')}\n` +
+                `💰 Баланс: *${esc(String(user.balance || 0))} ${esc(cur)}*\n\n` +
+                `У вас пока нет активной подписки\\. Откройте магазин и выберите тариф\\.`,
+            reply_markup: buildUserKeyboard(webAppUrl, cfg, 'cabinet')
+        };
+    }
+
+    const url = getSubUrl(sub.token);
+    const devices = sub.maxDevices > 0 ? `${(sub.devices || []).length}/${sub.maxDevices}` : `${(sub.devices || []).length}/∞`;
+    const traffic = sub.trafficTotal > 0 ? `${sub.trafficUsed || 0}/${sub.trafficTotal} GB` : '∞';
+    return {
+        text:
+            `🧑‍💻 *Кабинет*\n\n` +
+            `📋 Подписка: *${esc(getSubscriptionStatus(sub))}*\n` +
+            `📦 Тариф: *${esc(sub.name)}*\n` +
+            `📅 До: *${esc(formatDate(sub.expiresAt))}* \\(${esc(formatDaysLeft(sub.expiresAt))}\\)\n` +
+            `📱 Устройства: *${esc(devices)}*\n` +
+            `📊 Трафик: *${esc(traffic)}*\n` +
+            `💰 Баланс: *${esc(String(user.balance || 0))} ${esc(cur)}*\n\n` +
+            `🔗 URL подписки:\n\`${esc(url)}\``,
+        reply_markup: buildUserKeyboard(webAppUrl, cfg, 'cabinet')
+    };
+}
+
+function buildGiftScreen(data, from, webAppUrl) {
+    const cfg = data.settings || {};
+    const user = ensureShopUser(data, from);
+    const botLink = cfg.userBotLink || '';
+    const refLink = botLink && user.referralCode ? `${botLink}?start=ref_${user.referralCode}` : '';
+    const bonus = parseInt(cfg.referralBonusDays) || 3;
+
+    const text =
+        `🤝 *Подарить подписку*\n\n` +
+        `Отправьте другу ссылку на магазин\\. Если он перейдет по вашей реферальной ссылке, вы получите бонус: *${bonus} дн\\.*\n\n` +
+        (refLink ? `🔗 Ваша ссылка:\n\`${esc(refLink)}\`` : `🔗 Ссылка появится после сохранения ссылки бота в настройках\\.`);
+
+    return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'gift') };
+}
+
+function buildInfoScreen(data, from, webAppUrl) {
+    const cfg = data.settings || {};
+    const text =
+        `❓ *Информация*\n\n` +
+        `1\\. Купите или активируйте подписку\\.\n` +
+        `2\\. Откройте *Кабинет* и скопируйте URL подписки\\.\n` +
+        `3\\. Добавьте URL в Happ VPN, v2rayN, Streisand или V2Box\\.\n\n` +
+        `Если подключение не работает, проверьте срок подписки и лимит устройств\\.`;
+
+    return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'info') };
+}
+
+async function showUserScreen(bot, query, screen, webAppUrl) {
+    const data = loadData();
+    ensureShopUser(data, query.from);
+    saveData(data);
+
+    const builders = {
+        home: buildUserHome,
+        cabinet: buildCabinetScreen,
+        gift: buildGiftScreen,
+        info: buildInfoScreen
+    };
+    const view = (builders[screen] || buildUserHome)(data, query.from, webAppUrl);
+    const opts = {
+        chat_id: query.message.chat.id,
+        message_id: query.message.message_id,
+        parse_mode: 'MarkdownV2',
+        reply_markup: view.reply_markup
+    };
+
+    try {
+        if (query.message.photo) await bot.editMessageCaption(view.text, opts);
+        else await bot.editMessageText(view.text, opts);
+    } catch {
+        await bot.sendMessage(query.message.chat.id, view.text, {
+            parse_mode: 'MarkdownV2',
+            reply_markup: view.reply_markup
+        });
+    }
+}
+
 let userBot = null;
 let currentUserBotToken = '';
 
@@ -108,22 +286,12 @@ function setupUserBotHandlers(bot) {
             // Continue to show standard start message (fall through)
         }
 
-        // Стандартный /start — приветствие
-        // Save/update user name in shopUsers
-        {
-            const data2 = loadData();
-            if (!data2.shopUsers) data2.shopUsers = [];
-            let su = data2.shopUsers.find(u => u.userId === userId);
-            if (!su) {
-                su = { userId, balance: 0, referralCode: generateId().substring(0, 8), balanceHistory: [], createdAt: Date.now() };
-                data2.shopUsers.push(su);
-            }
-            if (msg.from.first_name) su.firstName = msg.from.first_name;
-            if (msg.from.username) su.username = msg.from.username;
-            saveData(data2);
-        }
-        const welcomeText = cfg.shopWelcome || 'Добро пожаловать!';
-        const welcomeMsg = `🛡 *${esc(shopName)}*\n\n${esc(welcomeText)}\n\n🆔 Ваш ID: \`${userId}\`\n\nЧтобы продолжить — откройте магазин 👇`;
+        // Стандартный /start — главное меню
+        const data2 = loadData();
+        ensureShopUser(data2, msg.from);
+        saveData(data2);
+        const home = buildUserHome(data2, msg.from, webAppUrl());
+        const welcomeMsg = home.text;
         const welcomePhoto = cfg.shopWelcomePhoto || '';
 
         if (welcomePhoto) {
@@ -135,18 +303,19 @@ function setupUserBotHandlers(bot) {
                     photoSource = fs.createReadStream(localPath);
                 } else {
                     // File missing — fallback to text
-                    bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'MarkdownV2' }).catch(() => { });
+                    bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'MarkdownV2', reply_markup: home.reply_markup }).catch(() => { });
                     return;
                 }
             }
             bot.sendPhoto(chatId, photoSource, {
                 caption: welcomeMsg,
-                parse_mode: 'MarkdownV2'
+                parse_mode: 'MarkdownV2',
+                reply_markup: home.reply_markup
             }).catch(() => {
-                bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'MarkdownV2' }).catch(() => { });
+                bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'MarkdownV2', reply_markup: home.reply_markup }).catch(() => { });
             });
         } else {
-            bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'MarkdownV2' }).catch(() => { });
+            bot.sendMessage(chatId, welcomeMsg, { parse_mode: 'MarkdownV2', reply_markup: home.reply_markup }).catch(() => { });
         }
     });
 
@@ -265,6 +434,18 @@ function setupUserBotHandlers(bot) {
         const msgId = query.message.message_id;
         const userId = query.from.id;
         const cb = query.data;
+
+        if (cb.startsWith('user:')) {
+            const screen = cb.split(':')[1] || 'home';
+            if (screen === 'shop') {
+                await bot.sendMessage(chatId, '🛒 Откройте магазин:', {
+                    reply_markup: { inline_keyboard: [[{ text: '🛒 Открыть магазин', web_app: { url: webAppUrl() } }]] }
+                });
+                return bot.answerCallbackQuery(query.id);
+            }
+            await showUserScreen(bot, query, screen === 'back' ? 'home' : screen, webAppUrl());
+            return bot.answerCallbackQuery(query.id);
+        }
 
         if (cb.startsWith('approve_order:')) {
             if (!getAdminIds().includes(userId)) return bot.answerCallbackQuery(query.id, { text: '⛔' });

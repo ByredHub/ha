@@ -719,8 +719,36 @@ function getDefaultSettings() {
         title: 'HappVPN', supportUrl: '', website: '', updateInterval: 12, serverUrl: '', adminPassword: '', botDeepLink: '',
         stubTitle: '⛔ Доступ ограничен', stubDisabled: 'Подписка деактивирована', stubExpired: 'Подписка истекла',
         stubDeviceLimit: 'Лимит устройств исчерпан', stubNotFound: 'Подписка не найдена', stubNoToken: 'Токен не указан',
+        paymentMethod: '', paymentInfo: '', paymentMethods: [],
         notifySuspiciousIp: true
     };
+}
+
+function normalizePaymentMethods(s = {}) {
+    const list = Array.isArray(s.paymentMethods) ? s.paymentMethods : [];
+    const normalized = list.map((m, i) => ({
+        id: String(m.id || m.provider || `method_${i}`).slice(0, 64),
+        provider: String(m.provider || m.id || 'custom').slice(0, 64),
+        name: String(m.name || m.title || 'Способ оплаты').slice(0, 80),
+        methods: String(m.methods || '').slice(0, 120),
+        currency: String(m.currency || s.currency || '₽').slice(0, 24),
+        info: String(m.info || '').slice(0, 2000),
+        enabled: m.enabled !== false
+    })).filter(m => m.name || m.info);
+
+    if (normalized.length) return normalized;
+    if (s.paymentMethod || s.paymentInfo) {
+        return [{
+            id: 'manual_card',
+            provider: 'manual_card',
+            name: s.paymentMethod || 'Оплата',
+            methods: '',
+            currency: s.currency || '₽',
+            info: s.paymentInfo || '',
+            enabled: true
+        }];
+    }
+    return [];
 }
 
 function generateToken() { return crypto.randomBytes(32).toString('base64url'); }
@@ -1774,6 +1802,7 @@ app.get('/api/shop/settings', (req, res) => {
         currency: s.currency || '₽',
         paymentMethod: s.paymentMethod || '',
         paymentInfo: s.paymentInfo || '',
+        paymentMethods: normalizePaymentMethods(s).filter(m => m.enabled),
         userBotWelcome: s.userBotWelcome || '',
         shopWelcomeShort: s.shopWelcomeShort || '',
         supportUrl: s.supportUrl || '',
@@ -1839,7 +1868,7 @@ app.get('/api/shop/my-orders', (req, res) => {
 
 // Create order from Mini App
 app.post('/api/shop/create-order', (req, res) => {
-    const { planId, userId, username, firstName, receipt } = req.body;
+    const { planId, userId, username, firstName, receipt, paymentMethod } = req.body;
     if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
     const data = loadData();
     const plan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
@@ -1854,6 +1883,7 @@ app.post('/api/shop/create-order', (req, res) => {
         chatId: parseInt(userId),
         username: username || '',
         firstName: firstName || '',
+        paymentMethod: paymentMethod || '',
         status: 'pending_review',
         createdAt: Date.now()
     };
@@ -1886,6 +1916,7 @@ app.post('/api/shop/create-order', (req, res) => {
             `👤 ${firstName || 'User'} ${username ? `(@${username})` : ''}\n` +
             `📦 Тариф: ${plan.name}\n` +
             `💰 Сумма: ${plan.price} ${cfg.currency || '₽'}\n` +
+            `💳 Оплата: ${order.paymentMethod || cfg.paymentMethod || 'не указано'}\n` +
             `📋 Заказ: #${order.id.substring(0, 8)}`;
         adminIds.forEach(adminId => {
             const opts = {
@@ -2054,11 +2085,11 @@ app.get('/api/shop/user-data', (req, res) => {
 
 // Top-up request
 app.post('/api/shop/top-up', (req, res) => {
-    const { userId, amount, firstName } = req.body;
+    const { userId, amount, firstName, paymentMethod } = req.body;
     if (!userId || !amount) return res.status(400).json({ error: 'Missing data' });
     const data = loadData();
     if (!data.topUpRequests) data.topUpRequests = [];
-    const request = { id: generateId(), userId: parseInt(userId), amount: parseInt(amount), firstName: firstName || '', status: 'pending', createdAt: Date.now() };
+    const request = { id: generateId(), userId: parseInt(userId), amount: parseInt(amount), firstName: firstName || '', paymentMethod: paymentMethod || '', status: 'pending', createdAt: Date.now() };
     data.topUpRequests.push(request);
     saveData(data);
 
@@ -2068,7 +2099,7 @@ app.post('/api/shop/top-up', (req, res) => {
         const cur = (data.settings || {}).currency || '₽';
         adminIds.forEach(adminId => {
             global.happBot.sendMessage(adminId,
-                `💳 *Заявка на пополнение*\n\n👤 ${(firstName || '').replace(/[_*[\]()~\`>#+=|{}.!\\-]/g, '\\$&')}\n💰 Сумма: *${amount} ${cur.replace(/[_*[\]()~\`>#+=|{}.!\\-]/g, '\\$&')}*\n📋 ID: ${request.id.substring(0, 8)}`,
+                `💳 *Заявка на пополнение*\n\n👤 ${(firstName || '').replace(/[_*[\]()~\`>#+=|{}.!\\-]/g, '\\$&')}\n💰 Сумма: *${amount} ${cur.replace(/[_*[\]()~\`>#+=|{}.!\\-]/g, '\\$&')}*\n💳 Оплата: ${(request.paymentMethod || 'не указано').replace(/[_*[\]()~\`>#+=|{}.!\\-]/g, '\\$&')}\n📋 ID: ${request.id.substring(0, 8)}`,
                 {
                     parse_mode: 'MarkdownV2',
                     reply_markup: {

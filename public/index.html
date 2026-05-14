@@ -604,6 +604,15 @@
                                     class="label-hint">(видны покупателям)</span></label><textarea
                                 id="settingPaymentInfo" placeholder="💳 Сбербанк: 2202 XXXX XXXX XXXX
 Имя получателя: Иванов И.И." class="form-input form-textarea" rows="3"></textarea></div>
+                        <div class="form-group">
+                            <label>Дополнительные способы оплаты <span class="label-hint">(можно включить несколько)</span></label>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <select id="paymentPresetSelect" class="form-input"></select>
+                                <button type="button" class="btn-outline btn-sm" id="btnAddPaymentMethod"
+                                    style="width:auto;white-space:nowrap">+ Добавить</button>
+                            </div>
+                        </div>
+                        <div id="paymentMethodsList" class="payment-methods-list"></div>
                         <div class="form-group"><label for="settingUserBotWelcome">Приветственное
                                 сообщение</label><textarea id="settingUserBotWelcome"
                                 placeholder="Добро пожаловать! Здесь вы можете приобрести VPN подписку."
