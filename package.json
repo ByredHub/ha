@@ -1,0 +1,15 @@
+{
+    "name": "happvpn",
+    "version": "2.0.0",
+    "description": "HappVPN Subscription Manager — VLESS subscription server for Happ VPN",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js"
+    },
+    "dependencies": {
+        "@kastov/cryptohapp": "^1.1.2",
+        "express": "^4.18.2",
+        "node-telegram-bot-api": "^0.67.0"
+    }
+}

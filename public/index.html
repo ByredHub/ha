@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HappVPN — Управление</title>
+    <meta name="theme-color" content="#6366f1">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="HappVPN">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-512.png">
+    <link rel="icon" href="icon-512.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Background -->
+    <div class="bg-aurora">
+        <div class="aurora-blob blob-1"></div>
+        <div class="aurora-blob blob-2"></div>
+        <div class="aurora-blob blob-3"></div>
+    </div>
+    <div class="noise-overlay"></div>
+
+    <!-- LOGIN OVERLAY -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-card">
+            <div class="login-logo">🛡</div>
+            <h2>HappVPN</h2>
+            <p>Введите пароль администратора</p>
+            <input type="password" id="loginPassword" placeholder="Пароль" class="form-input" autofocus>
+            <button class="btn-primary btn-full" id="btnLogin">Войти</button>
+            <div class="login-error" id="loginError"></div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div class="app-wrapper" id="appWrapper" style="display:none">
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 40 40" fill="none">
+                            <path d="M20 4L4 12v16l16 8 16-8V12L20 4z" stroke="url(#logoGrad)" stroke-width="2"
+                                fill="none" />
+                            <path d="M20 8l-12 6v12l12 6 12-6V14L20 8z" fill="url(#logoGrad)" opacity="0.15" />
+                            <path d="M14 18l4 4 8-8" stroke="url(#logoGrad)" stroke-width="2.5" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                            <defs>
+                                <linearGradient id="logoGrad" x1="4" y1="4" x2="36" y2="36">
+                                    <stop offset="0%" stop-color="#6366f1" />
+                                    <stop offset="100%" stop-color="#06b6d4" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <div class="logo-text">
+                        <h1>HappVPN</h1><span class="logo-subtitle">Subscription Manager</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-icon" id="btnExport" title="Экспорт"><svg viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                        </svg></button>
+                    <button class="btn-icon" id="btnImport" title="Импорт"><svg viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg></button>
+                    <input type="file" id="importFile" accept=".json" hidden>
+                </div>
+            </div>
+        </header>
+
+        <section class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-icon" style="--accent:#6366f1"><svg viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg></div>
+                <div class="stat-info"><span class="stat-value" id="statTotal">0</span><span
+                        class="stat-label">Шаблонов</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="--accent:#10b981"><svg viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3M8 12h8" />
+                    </svg></div>
+                <div class="stat-info"><span class="stat-value" id="statActive">0</span><span
+                        class="stat-label">Серверов</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="--accent:#f59e0b"><svg viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                    </svg></div>
+                <div class="stat-info"><span class="stat-value" id="statSubs">0</span><span
+                        class="stat-label">Подписок</span></div>
+            </div>
+        </section>
+
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="dashboard"><svg viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2">
+                    <path d="M18 20V10M12 20V4M6 20v-6" />
+                </svg><span>Дашборд</span></button>
+            <button class="tab-btn" data-tab="templates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <line x1="8" y1="21" x2="16" y2="21" />
+                    <line x1="12" y1="17" x2="12" y2="21" />
+                </svg><span>Шаблоны</span></button>
+            <button class="tab-btn" data-tab="subscriptions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                </svg><span>Подписки</span></button>
+            <button class="tab-btn" data-tab="monitoring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                </svg><span>Мониторинг</span></button>
+            <button class="tab-btn" data-tab="servers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                    <line x1="6" y1="6" x2="6" y2="6" />
+                    <line x1="6" y1="18" x2="6" y2="18" />
+                </svg><span>Серверы</span></button>
+            <button class="tab-btn" data-tab="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                </svg><span>Логи</span></button>
+            <button class="tab-btn" data-tab="users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                </svg><span>Пользователи</span></button>
+            <button class="tab-btn" data-tab="shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <circle cx="9" cy="21" r="1" />
+                    <circle cx="20" cy="21" r="1" />
+                    <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
+                </svg><span>Магазин</span></button>
+            <button class="tab-btn" data-tab="mtproxy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path
+                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 019-9" />
+                </svg><span>MTProxy</span></button>
+            <button class="tab-btn" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                        d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg><span>Настройки</span></button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <section class="tab-panel active" id="tab-dashboard">
+                <div class="section-header">
+                    <h2>📊 Дашборд</h2>
+                </div>
+
+                <!-- Server Monitor -->
+                <div class="monitor-grid" id="monitorGrid">
+                    <div class="monitor-card">
+                        <div class="monitor-label">CPU</div>
+                        <div class="monitor-value" id="monCpu">—</div>
+                        <div class="monitor-bar">
+                            <div class="monitor-fill" id="monCpuBar" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-label">RAM</div>
+                        <div class="monitor-value" id="monRam">—</div>
+                        <div class="monitor-bar">
+                            <div class="monitor-fill" id="monRamBar" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-label">Диск</div>
+                        <div class="monitor-value" id="monDisk">—</div>
+                        <div class="monitor-bar">
+                            <div class="monitor-fill" id="monDiskBar" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-label">Xray</div>
+                        <div class="monitor-value" id="monXray">—</div>
+                        <div class="monitor-sub" id="monUptime">—</div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-label">🟢 Онлайн</div>
+                        <div class="monitor-value" id="monOnline" style="color:var(--success)">0</div>
+                        <div class="monitor-sub" id="monOnlineSub">юзеров</div>
+                    </div>
+                </div>
+
+                <div class="dash-stats" id="dashStats"></div>
+                <div class="dash-chart-card">
+                    <h3>Подключения за 7 дней</h3>
+                    <div class="dash-chart" id="dashChart"></div>
+                </div>
+                <div class="dash-recent">
+                    <h3>Последние события</h3>
+                    <div id="dashRecent"></div>
+                </div>
+            </section>
+
+            <!-- Templates Tab -->
+            <section class="tab-panel" id="tab-templates">
+                <div class="section-header">
+                    <h2>Шаблоны серверов</h2><button class="btn-primary" id="btnAddTpl"><svg viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg><span>Добавить</span></button>
+                </div>
+                <div class="search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg><input type="text" id="searchTemplates" placeholder="Поиск шаблонов..."></div>
+                <div class="templates-list" id="templatesList"></div>
+                <div class="empty-state" id="emptyTemplates">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="35" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-dasharray="8 4" opacity="0.4" />
+                            <path d="M30 35l7 7 13-13" stroke="url(#emptyGrad)" stroke-width="3" stroke-linecap="round"
+                                stroke-linejoin="round" opacity="0.6" />
+                            <defs>
+                                <linearGradient id="emptyGrad" x1="5" y1="5" x2="75" y2="75">
+                                    <stop offset="0%" stop-color="#6366f1" />
+                                    <stop offset="100%" stop-color="#06b6d4" />
+                                </linearGradient>
+                            </defs>
+                        </svg></div>
+                    <h3>Нет шаблонов</h3>
+                    <p>Добавьте шаблон с VLESS серверами</p>
+                </div>
+            </section>
+
+            <!-- Subscriptions Tab -->
+            <section class="tab-panel" id="tab-subscriptions">
+                <div class="section-header">
+                    <h2>Подписки</h2><button class="btn-primary" id="btnAddSub"><svg viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg><span>Создать</span></button>
+                </div>
+                <div class="search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg><input type="text" id="searchSubs" placeholder="Поиск подписок..."></div>
+                <div class="subs-list" id="subsList"></div>
+                <div class="empty-state" id="emptySubs">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <rect x="15" y="12" width="50" height="56" rx="6" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-dasharray="8 4" opacity="0.4" />
+                            <path d="M28 30h24M28 40h18M28 50h22" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-linecap="round" opacity="0.5" />
+                        </svg></div>
+                    <h3>Нет подписок</h3>
+                    <p>Создайте подписку</p>
+                </div>
+            </section>
+
+            <!-- Servers Tab -->
+            <section class="tab-panel" id="tab-servers">
+                <div class="section-header">
+                    <h2>🖥 Серверы (Пинг)</h2>
+                    <button class="btn-primary" id="btnPingAll"><svg viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg><span>Пинг всех</span></button>
+                </div>
+                <div class="servers-list" id="serversList"></div>
+                <div class="empty-state" id="emptyServers" style="display:none">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="35" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-dasharray="8 4" opacity="0.4" />
+                            <circle cx="40" cy="40" r="15" stroke="url(#emptyGrad)" stroke-width="2" opacity="0.6" />
+                        </svg></div>
+                    <h3>Нет серверов</h3>
+                    <p>Добавьте серверы в шаблонах</p>
+                </div>
+            </section>
+
+            <!-- Monitoring Tab -->
+            <section class="tab-panel" id="tab-monitoring">
+                <div class="section-header">
+                    <h2>👁 Мониторинг подключений</h2>
+                </div>
+
+                <!-- Online Now Section -->
+                <div class="online-section">
+                    <div class="online-header">
+                        <div class="online-title"><span class="online-pulse"></span> Онлайн сейчас</div>
+                        <span class="online-count" id="onlineCount">0</span>
+                    </div>
+                    <div class="online-list" id="onlineList">
+                        <div class="mon-no-data">Загрузка...</div>
+                    </div>
+                </div>
+
+                <div class="mon-filter-bar">
+                    <button class="mon-filter-btn active" data-mon-filter="all">Все</button>
+                    <button class="mon-filter-btn" data-mon-filter="high">🔴 Подозрительные</button>
+                    <button class="mon-filter-btn" data-mon-filter="medium">🟡 Внимание</button>
+                    <button class="mon-filter-btn" data-mon-filter="multi">📱 2+ устройств</button>
+                </div>
+                <div class="mon-list" id="monList"></div>
+                <div class="empty-state" id="emptyMon" style="display:none">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="28" stroke="url(#emptyGrad)" stroke-width="2" opacity="0.4" />
+                            <path d="M30 40a10 10 0 0020 0 10 10 0 00-20 0z" stroke="url(#emptyGrad)" stroke-width="2"
+                                opacity="0.6" />
+                            <circle cx="40" cy="40" r="4" fill="url(#emptyGrad)" opacity="0.5" />
+                        </svg></div>
+                    <h3>Всё чисто</h3>
+                    <p>Подозрительных подключений нет</p>
+                </div>
+            </section>
+
+            <!-- Logs Tab -->
+            <section class="tab-panel" id="tab-logs">
+                <div class="section-header">
+                    <h2>📜 Лог подключений</h2><button class="btn-outline btn-danger btn-sm"
+                        id="btnClearLogs">Очистить</button>
+                </div>
+                <div class="logs-list" id="logsList"></div>
+                <button class="btn-outline btn-full" id="btnLoadMoreLogs" style="display:none;margin-top:12px">Загрузить
+                    ещё</button>
+            </section>
+
+            <!-- Users Tab -->
+            <section class="tab-panel" id="tab-users">
+                <div class="section-header">
+                    <h2>👥 Пользователи</h2>
+                    <button class="btn-primary" id="btnBroadcast"><svg viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"></path>
+                        </svg><span>Рассылка</span></button>
+                </div>
+                <div class="search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg><input type="text" id="searchUsers" placeholder="Поиск пользователей..."></div>
+                <div class="users-stats-bar" id="usersStatsBar"></div>
+                <div class="subs-list" id="usersList"></div>
+                <div class="empty-state" id="emptyUsers">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="30" r="14" stroke="url(#emptyGrad)" stroke-width="2" opacity="0.4" />
+                            <path d="M18 62c0-12.15 9.85-22 22-22s22 9.85 22 22" stroke="url(#emptyGrad)"
+                                stroke-width="2" stroke-dasharray="8 4" opacity="0.4" />
+                        </svg></div>
+                    <h3>Нет пользователей</h3>
+                    <p>Пользователи появятся после первых заказов</p>
+                </div>
+            </section>
+
+            <!-- Shop / Plans Tab -->
+            <section class="tab-panel" id="tab-shop">
+                <div class="section-header">
+                    <h2>🛒 Магазин (Тарифы)</h2><button class="btn-primary" id="btnAddPlan"><svg viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg><span>Добавить тариф</span></button>
+                </div>
+                <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:16px">
+                    Тарифы отображаются в клиентском боте. Пользователи смогут выбрать тариф, оплатить и получить
+                    подписку.
+                </p>
+                <div class="plans-list" id="plansList"></div>
+                <div class="empty-state" id="emptyPlans">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="35" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-dasharray="8 4" opacity="0.4" />
+                            <path d="M25 32h30M25 40h20M25 48h25" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-linecap="round" opacity="0.5" />
+                        </svg></div>
+                    <h3>Нет тарифов</h3>
+                    <p>Создайте тариф для клиентского бота</p>
+                </div>
+
+                <div class="settings-card" style="margin-top:24px">
+                    <h3>📦 Заказы</h3>
+                    <div class="orders-filter-bar">
+                        <button class="mon-filter-btn active" data-order-filter="all">Все</button>
+                        <button class="mon-filter-btn" data-order-filter="pending_review">⏳ Ожидают</button>
+                        <button class="mon-filter-btn" data-order-filter="completed">✅ Выполнены</button>
+                        <button class="mon-filter-btn" data-order-filter="rejected">❌ Отклонены</button>
+                    </div>
+                    <div class="orders-list" id="ordersList"></div>
+                </div>
+            </section>
+
+            <!-- MTProxy Tab -->
+            <section class="tab-panel" id="tab-mtproxy">
+                <div class="section-header">
+                    <h2>🌐 MTProxy Manager</h2><button class="btn-primary" id="btnAddMtproxy"><svg viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg><span>Добавить</span></button>
+                </div>
+
+                <div class="mtproxy-info-banner" id="mtproxyBanner">
+                    <div class="mtproxy-banner-icon">📡</div>
+                    <div class="mtproxy-banner-content">
+                        <strong>MTProxy → VLESS</strong>
+                        <p>Пользователь подключается к MTProxy (видит спонсорский канал), а сервер проксирует трафик
+                            через VLESS.</p>
+                        <div style="font-size:0.75rem;color:var(--text-tertiary);margin-top:4px">
+                            User → MTProxy (ad_tag) → Xray SOCKS5 → VLESS → Telegram
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mtproxy-stats-bar" id="mtproxyStats">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="--accent:#0088cc"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 019-9" />
+                            </svg></div>
+                        <div class="stat-info"><span class="stat-value" id="mtpStatTotal">0</span><span
+                                class="stat-label">Прокси</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="--accent:#10b981"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M8 12l2 2 4-4" />
+                            </svg></div>
+                        <div class="stat-info"><span class="stat-value" id="mtpStatActive">0</span><span
+                                class="stat-label">Активных</span></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="--accent:#f59e0b"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                            </svg></div>
+                        <div class="stat-info"><span class="stat-value" id="mtpStatVless">0</span><span
+                                class="stat-label">VLESS</span></div>
+                    </div>
+                </div>
+
+                <div class="subs-list" id="mtproxyList"></div>
+                <div class="empty-state" id="emptyMtproxy">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="35" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-dasharray="8 4" opacity="0.4" />
+                            <path d="M40 15a25 25 0 000 50m0-50a25 25 0 010 50" stroke="url(#emptyGrad)"
+                                stroke-width="2" opacity="0.5" />
+                            <line x1="15" y1="40" x2="65" y2="40" stroke="url(#emptyGrad)" stroke-width="2"
+                                opacity="0.3" />
+                        </svg></div>
+                    <h3>Нет MTProxy</h3>
+                    <p>Создайте прокси для Telegram со спонсорским каналом</p>
+                </div>
+
+                <!-- Setup Guide -->
+                <div class="settings-card" style="margin-top:24px" id="mtproxySetupCard">
+                    <h3>🛠 Установка на сервер</h3>
+                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px">
+                        Скрипт установит <code>mtg</code> (Go MTProxy) + настроит Xray SOCKS5 → VLESS проксирование.
+                    </p>
+                    <div class="sub-url-block">
+                        <div class="sub-url-display">
+                            <span class="sub-url-text" id="mtproxySetupCmd" style="font-size:0.75rem">bash <(curl -sL
+                                    URL/api/mtproxy/setup-script)</span>
+                        </div>
+                        <button class="btn-primary btn-full" id="btnCopyMtpSetup">📋 Копировать команду</button>
+                    </div>
+                </div>
+
+                <!-- WhatsApp Proxy Section -->
+                <div class="section-header" style="margin-top:32px">
+                    <h2>📱 WhatsApp Proxy</h2><button class="btn-primary" id="btnAddWaProxy"
+                        onclick="window._openCreateWaProxy && window._openCreateWaProxy()"><svg viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg><span>Добавить</span></button>
+                </div>
+
+                <div class="mtproxy-info-banner"
+                    style="border-color:rgba(37,211,102,0.2);background:linear-gradient(135deg,rgba(37,211,102,0.08),rgba(99,102,241,0.06))">
+                    <div class="mtproxy-banner-icon">📱</div>
+                    <div class="mtproxy-banner-content">
+                        <strong
+                            style="background:linear-gradient(135deg,#25d366,#128c7e);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">WhatsApp
+                            → VLESS</strong>
+                        <p>Пользователь вводит ваш сервер в настройках WhatsApp, трафик идёт через VLESS.</p>
+                        <div style="font-size:0.75rem;color:var(--text-tertiary);margin-top:4px">
+                            User → WhatsApp Proxy (Xray) → VLESS → WhatsApp серверы
+                        </div>
+                    </div>
+                </div>
+
+                <div class="subs-list" id="waProxyList"></div>
+                <div class="empty-state" id="emptyWaProxy">
+                    <div class="empty-icon"><svg viewBox="0 0 80 80" fill="none">
+                            <circle cx="40" cy="40" r="35" stroke="url(#emptyGrad)" stroke-width="2"
+                                stroke-dasharray="8 4" opacity="0.4" />
+                            <rect x="25" y="20" width="30" height="40" rx="5" stroke="url(#emptyGrad)" stroke-width="2"
+                                opacity="0.5" />
+                        </svg></div>
+                    <h3>Нет WhatsApp Proxy</h3>
+                    <p>Создайте прокси для WhatsApp через VLESS</p>
+                </div>
+            </section>
+
+            <!-- Settings Tab -->
+            <section class="tab-panel" id="tab-settings">
+                <div class="section-header">
+                    <h2>Настройки</h2>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-card">
+                        <h3>⚙️ Профиль подписки</h3>
+                        <div class="form-group"><label for="settingTitle">Название профиля</label><input type="text"
+                                id="settingTitle" placeholder="HappVPN" class="form-input"></div>
+                        <div class="form-group"><label for="settingDesc">Описание</label><textarea id="settingDesc"
+                                placeholder="VPN подписка" class="form-input form-textarea" rows="2"></textarea></div>
+                        <div class="form-group"><label for="settingSupportUrl">Ссылка поддержки</label><input type="url"
+                                id="settingSupportUrl" placeholder="https://t.me/support" class="form-input"></div>
+                        <div class="form-group"><label for="settingWebsite">Веб-сайт</label><input type="url"
+                                id="settingWebsite" placeholder="https://yoursite.com" class="form-input"></div>
+                        <div class="form-group"><label for="settingUpdateInterval">Интервал обновления
+                                (часы)</label><input type="number" id="settingUpdateInterval" placeholder="12" min="1"
+                                max="168" class="form-input"></div>
+                    </div>
+                    <div class="settings-card">
+                        <h3>🌐 Сервер</h3>
+                        <div class="form-group"><label for="settingServerUrl">URL сервера <span class="label-hint">(для
+                                    ссылок подписок)</span></label><input type="url" id="settingServerUrl"
+                                placeholder="https://vpn.example.com" class="form-input"></div>
+                        <div class="form-group"><label for="settingBotLink">Deep-link бота <span
+                                    class="label-hint">(например: https://t.me/YourBot)</span></label><input type="url"
+                                id="settingBotLink" placeholder="https://t.me/HappVPNBot" class="form-input"></div>
+                    </div>
+                    <div class="settings-card">
+                        <h3>🔐 Безопасность</h3>
+                        <div class="form-group"><label for="settingPassword">Пароль админ-панели <span
+                                    class="label-hint">(пусто = без пароля)</span></label><input type="password"
+                                id="settingPassword" placeholder="Установить пароль" class="form-input"></div>
+                    </div>
+                    <div class="settings-card">
+                        <h3>🤖 Telegram бот (Админский)</h3>
+                        <div class="form-group"><label for="settingBotToken">Bot Token <span class="label-hint">(от
+                                    @BotFather)</span></label><input type="text" id="settingBotToken"
+                                placeholder="123456:ABC-DEF..." class="form-input"></div>
+                        <div class="form-group"><label for="settingAdminIds">Admin IDs <span class="label-hint">(через
+                                    запятую)</span></label><input type="text" id="settingAdminIds"
+                                placeholder="7852083005,123456789" class="form-input"></div>
+                        <div class="form-group"><label for="settingAdminChatId">Chat ID для алертов <span
+                                    class="label-hint">(уведомления)</span></label><input type="text"
+                                id="settingAdminChatId" placeholder="123456789" class="form-input"></div>
+                        <div class="toggle-row" style="margin-top:8px">
+                            <label>Алерты о подозрительных IP</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="settingNotifySuspIp" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <h3>🛒 Telegram бот (Клиентский / Магазин)</h3>
+                        <div class="form-group"><label for="settingUserBotToken">Bot Token <span
+                                    class="label-hint">(отдельный бот для покупателей)</span></label><input type="text"
+                                id="settingUserBotToken" placeholder="123456:ABC-DEF..." class="form-input"></div>
+                        <div class="form-group"><label for="settingShopName">Название магазина</label><input type="text"
+                                id="settingShopName" placeholder="HappVPN" class="form-input"></div>
+                        <div class="form-group"><label for="settingCurrency">Валюта</label><input type="text"
+                                id="settingCurrency" placeholder="₽" class="form-input" style="max-width:100px"></div>
+                        <div class="form-group"><label for="settingDevicePrice">Цена за устройство <span
+                                    class="label-hint">(0 = покупка выкл.)</span></label><input type="number"
+                                id="settingDevicePrice" placeholder="50" min="0" class="form-input"
+                                style="max-width:140px"></div>
+                        <div class="form-group"><label for="settingPaymentMethod">Способ оплаты</label><input
+                                type="text" id="settingPaymentMethod" placeholder="Перевод на карту" class="form-input">
+                        </div>
+                        <div class="form-group"><label for="settingPaymentInfo">Реквизиты для оплаты <span
+                                    class="label-hint">(видны покупателям)</span></label><textarea
+                                id="settingPaymentInfo" placeholder="💳 Сбербанк: 2202 XXXX XXXX XXXX
+Имя получателя: Иванов И.И." class="form-input form-textarea" rows="3"></textarea></div>
+                        <div class="form-group"><label for="settingUserBotWelcome">Приветственное
+                                сообщение</label><textarea id="settingUserBotWelcome"
+                                placeholder="Добро пожаловать! Здесь вы можете приобрести VPN подписку."
+                                class="form-input form-textarea" rows="2"></textarea></div>
+                        <div class="form-group"><label for="settingShopWelcomeShort">Короткий текст <span
+                                    class="label-hint">(подзаголовок Mini App)</span></label><input type="text"
+                                id="settingShopWelcomeShort" placeholder="Быстрый и безопасный VPN" class="form-input">
+                        </div>
+                        <div class="form-group"><label for="settingUserBotLink">Ссылка бота <span
+                                    class="label-hint">(для рефералов, например:
+                                    https://t.me/YourShopBot)</span></label><input type="text" id="settingUserBotLink"
+                                placeholder="https://t.me/HappVPN_bot" class="form-input"></div>
+                        <div class="form-group"><label for="settingReferralBonusDays">Бонус за реферала
+                                (дней)</label><input type="number" id="settingReferralBonusDays" placeholder="3" min="0"
+                                class="form-input" style="max-width:120px"></div>
+                        <div class="form-group"><label for="settingShopWelcome">Текст приветствия бота <span
+                                    class="label-hint">(при /start)</span></label><textarea id="settingShopWelcome"
+                                placeholder="Добро пожаловать!" class="form-input form-textarea" rows="2"></textarea>
+                        </div>
+                        <div class="form-group"><label>Фото приветствия <span class="label-hint">(отображается при
+                                    /start)</span></label>
+                            <div class="photo-upload-wrap" id="welcomePhotoWrap">
+                                <img id="welcomePhotoPreview"
+                                    style="display:none;max-width:200px;border-radius:8px;margin-bottom:8px">
+                                <div style="display:flex;gap:8px;align-items:center">
+                                    <label class="btn-outline btn-sm" style="cursor:pointer;width:auto">
+                                        📷 Загрузить фото
+                                        <input type="file" id="settingShopWelcomePhoto" accept="image/*"
+                                            style="display:none">
+                                    </label>
+                                    <button class="btn-outline btn-sm btn-danger" id="btnRemoveWelcomePhoto"
+                                        style="display:none;width:auto">✕ Убрать</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-card">
+                        <div class="toggle-row">
+                            <h3>🔄 Relay (Xray прокси)</h3>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="settingRelayEnabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="toggle-hint" id="relayHint">Скрывает чужие VLESS за вашим сервером</p>
+                        <div class="relay-fields" id="relayFields" style="display:none">
+                            <div class="form-group"><label for="settingRelayDomain">Домен relay</label><input
+                                    type="text" id="settingRelayDomain" placeholder="vpn.example.com" class="form-input">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="settingRelayMainPort">Основной порт</label><input
+                                        type="number" id="settingRelayMainPort" placeholder="8443" class="form-input">
+                                </div>
+                                <div class="form-group"><label for="settingRelayBasePort">Начальный порт</label><input
+                                        type="number" id="settingRelayBasePort" placeholder="10001" class="form-input">
+                                </div>
+                            </div>
+                            <div class="form-group"
+                                style="border-top:1px solid var(--border-subtle);padding-top:12px;margin-top:8px">
+                                <label for="settingRealitySni">🎭 Reality SNI <span class="label-hint">(маскировка
+                                        трафика под русский сайт)</span></label>
+                                <select id="settingRealitySni" class="form-input">
+                                    <option value="www.gosuslugi.ru">🏛 Госуслуги (www.gosuslugi.ru)</option>
+                                    <option value="www.sberbank.ru">🏦 Сбербанк (www.sberbank.ru)</option>
+                                    <option value="www.wildberries.ru">🛍 Wildberries (www.wildberries.ru)</option>
+                                    <option value="ozon.ru">📦 Ozon (ozon.ru)</option>
+                                    <option value="www.avito.ru">📋 Авито (www.avito.ru)</option>
+                                    <option value="mail.ru">📧 Mail.ru (mail.ru)</option>
+                                    <option value="dzen.ru">📰 Дзен (dzen.ru)</option>
+                                    <option value="vk.com">💬 ВКонтакте (vk.com)</option>
+                                    <option value="ok.ru">👥 Одноклассники (ok.ru)</option>
+                                    <option value="ya.ru">🔍 Яндекс (ya.ru)</option>
+                                </select>
+                                <p style="font-size:0.72rem;color:var(--text-tertiary);margin-top:4px">РКН/провайдер
+                                    видит обычное подключение к этому сайту. VPN трафик полностью невидим.</p>
+                            </div>
+                            <div class="form-group">
+                                <label>🔑 Reality Public Key <span class="label-hint">(авто-генерация)</span></label>
+                                <input type="text" id="settingRealityPublicKey" class="form-input" readonly
+                                    style="font-family:monospace;font-size:0.75rem;color:var(--accent-primary);background:rgba(99,102,241,0.05)">
+                                <p style="font-size:0.72rem;color:var(--text-tertiary);margin-top:4px">Ключ генерируется
+                                    автоматически при первом запуске relay</p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h3> Заглушки <span class="label-hint">(тексты при ограничении доступа)</span></h3>
+                    <div class="form-group"><label for="settingStubTitle">Заголовок</label><input type="text"
+                            id="settingStubTitle" placeholder="⛔ Доступ ограничен" class="form-input"></div>
+                    <div class="form-group"><label for="settingStubDisabled">Подписка отключена</label><input
+                            type="text" id="settingStubDisabled" placeholder="Подписка деактивирована"
+                            class="form-input"></div>
+                    <div class="form-group"><label for="settingStubExpired">Подписка истекла</label><input type="text"
+                            id="settingStubExpired" placeholder="Подписка истекла" class="form-input"></div>
+                    <div class="form-group"><label for="settingStubDeviceLimit">Лимит устройств</label><input
+                            type="text" id="settingStubDeviceLimit" placeholder="Лимит устройств исчерпан"
+                            class="form-input"></div>
+                    <div class="form-group"><label for="settingStubNotFound">Не найдена</label><input type="text"
+                            id="settingStubNotFound" placeholder="Подписка не найдена" class="form-input"></div>
+                    <div class="form-group"><label for="settingStubNoToken">Нет токена</label><input type="text"
+                            id="settingStubNoToken" placeholder="Токен не указан" class="form-input"></div>
+                </div>
+                <button class="btn-primary btn-full" id="btnSaveSettings"><svg viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                        <polyline points="17 21 17 13 7 13 7 21" />
+                        <polyline points="7 3 7 8 15 8" />
+                    </svg>Сохранить</button>
+                <div class="settings-card" style="margin-top:16px">
+                    <h3>💾 Данные</h3>
+                    <div class="settings-actions">
+                        <button class="btn-outline" id="btnExportAll"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                            </svg>Экспорт</button>
+                        <button class="btn-outline btn-danger" id="btnClearAll"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                            </svg>Очистить</button>
+                    </div>
+                </div>
+    </div>
+    </section>
+    </main>
+    </div>
+
+    <!-- Add Template Modal -->
+    <div class="modal-overlay" id="modalAddTpl">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTplTitle">Добавить шаблон</h3><button class="modal-close" data-close="modalAddTpl"><svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label for="tplName">Название</label><input type="text" id="tplName"
+                        placeholder="WI-FI VPN" class="form-input"></div>
+                <div class="form-group"><label for="tplUris">VLESS серверы <span class="label-hint">(по одному на
+                            строку)</span></label><textarea id="tplUris"
+                        placeholder="vless://{uuid}@server:443?params#Name" class="form-input form-textarea"
+                        rows="6"></textarea></div>
+                <div class="form-group"
+                    style="border-top:1px solid var(--border-subtle); padding-top:12px; margin-top:8px">
+                    <label for="tplSyncUrl">🔄 URL подписки-донора <span
+                            class="label-hint">(авто-синхронизация)</span></label>
+                    <input type="text" id="tplSyncUrl" placeholder="https://provider.com/sub?token=..."
+                        class="form-input">
+                </div>
+                <div class="form-row" id="tplSyncFields" style="display:none">
+                    <div class="form-group"><label for="tplSyncInterval">Интервал (часы)</label><input type="number"
+                            id="tplSyncInterval" value="12" min="1" max="168" class="form-input"></div>
+                    <div class="form-group"><label for="tplSyncHwid">X-HWID</label><input type="text" id="tplSyncHwid"
+                            placeholder="авто" class="form-input"></div>
+                </div>
+                <div id="tplSyncStatus" style="font-size:0.75rem; color:var(--text-tertiary); margin-top:4px"></div>
+                <input type="hidden" id="tplEditId" value="">
+            </div>
+            <div class="modal-footer"><button class="btn-outline" data-close="modalAddTpl">Отмена</button><button
+                    class="btn-primary" id="btnSaveTpl">Сохранить</button></div>
+        </div>
+    </div>
+
+    <!-- Add Subscription Modal -->
+    <div class="modal-overlay" id="modalAddSub">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalSubTitle">Создать подписку</h3><button class="modal-close" data-close="modalAddSub"><svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label for="subName">Название</label><input type="text" id="subName"
+                        placeholder="Базовый план" class="form-input"></div>
+                <div class="form-row">
+                    <div class="form-group"><label for="subTraffic">Трафик (ГБ) <span
+                                class="label-hint">0=∞</span></label><input type="number" id="subTraffic"
+                            placeholder="0" min="0" class="form-input"></div>
+                    <div class="form-group"><label for="subMaxDevices">Устройства <span
+                                class="label-hint">0=∞</span></label><input type="number" id="subMaxDevices"
+                            placeholder="1" min="0" class="form-input"></div>
+                </div>
+                <div class="form-group"><label for="subExpires">Срок действия</label><input type="date" id="subExpires"
+                        class="form-input"></div>
+                <div class="form-group"><label for="subNotes">Заметки</label><textarea id="subNotes"
+                        placeholder="Клиент: Иван, тел: +7..." class="form-input form-textarea" rows="2"></textarea>
+                </div>
+                <div class="form-group"><label>Шаблоны</label>
+                    <div class="key-select-list" id="tplSelectList"></div>
+                </div>
+                <input type="hidden" id="subEditId" value="">
+            </div>
+            <div class="modal-footer"><button class="btn-outline" data-close="modalAddSub">Отмена</button><button
+                    class="btn-primary" id="btnSaveSub">Создать</button></div>
+        </div>
+    </div>
+
+    <!-- Subscription Detail Modal -->
+    <div class="modal-overlay" id="modalSubDetail">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 id="subDetailTitle">Подписка</h3><button class="modal-close" data-close="modalSubDetail"><svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <!-- Status badges -->
+                <div class="sub-badges" id="subBadges"></div>
+
+                <!-- QR -->
+                <div class="sub-detail-section">
+                    <h4>📲 QR-код</h4>
+                    <div class="qr-container" id="subQrCode"></div>
+                </div>
+
+                <!-- URL -->
+                <div class="sub-detail-section">
+                    <h4>🔗 URL подписки</h4>
+                    <div class="sub-url-block">
+                        <div class="sub-url-display"><span class="sub-url-text" id="subUrlText">—</span></div>
+                        <button class="btn-primary btn-full" id="btnCopyUrl"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" />
+                                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                            </svg>Копировать URL</button>
+                    </div>
+                </div>
+
+                <!-- Bot deep-link -->
+                <div class="sub-detail-section" id="subBotLinkSection" style="display:none">
+                    <h4>🤖 Ссылка для клиента (Telegram)</h4>
+                    <div class="sub-url-display"><span class="sub-url-text" id="subBotLink">—</span></div>
+                    <button class="btn-outline btn-full btn-sm" id="btnCopyBotLink">Копировать ссылку бота</button>
+                </div>
+
+                <!-- Notes -->
+                <div class="sub-detail-section" id="subNotesSection" style="display:none">
+                    <h4>📝 Заметки</h4>
+                    <p class="sub-notes-text" id="subNotesText"></p>
+                </div>
+
+                <!-- Stats -->
+                <div class="sub-detail-section">
+                    <div class="sub-stats-row">
+                        <div class="sub-stat"><span class="sub-stat-label">Обращений</span><span class="sub-stat-value"
+                                id="subAccessCount">0</span></div>
+                        <div class="sub-stat"><span class="sub-stat-label">Создана</span><span class="sub-stat-value"
+                                id="subCreatedAt">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="sub-detail-section">
+                    <button class="btn-outline btn-full" id="btnRegenToken"><svg viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10" />
+                            <polyline points="1 20 1 14 7 14" />
+                            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+                        </svg>Перегенерировать токен</button>
+                </div>
+
+                <!-- Templates -->
+                <div class="sub-detail-section">
+                    <h4>📦 Шаблонов: <span id="subTplCount">0</span></h4>
+                    <div class="sub-keys-preview" id="subTplsPreview"></div>
+                </div>
+
+                <!-- Devices -->
+                <div class="sub-detail-section">
+                    <div class="sub-detail-section-header">
+                        <h4>📱 Устройства: <span id="subDeviceCount">0</span><span id="subDeviceLimit"></span></h4>
+                        <button class="btn-outline btn-sm btn-danger" id="btnClearDevices"
+                            style="font-size:0.75rem">Сбросить</button>
+                    </div>
+                    <div class="sub-devices-list" id="subDevicesList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Plan Modal -->
+    <div class="modal-overlay" id="modalAddPlan">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalPlanTitle">Добавить тариф</h3><button class="modal-close" data-close="modalAddPlan"><svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label for="planName">Название тарифа</label><input type="text" id="planName"
+                        placeholder="Базовый" class="form-input"></div>
+                <div class="form-row">
+                    <div class="form-group"><label for="planPrice">Цена</label><input type="number" id="planPrice"
+                            placeholder="100" min="0" step="any" class="form-input"></div>
+                    <div class="form-group"><label for="planDuration">Срок (дней)</label><input type="number"
+                            id="planDuration" placeholder="30" min="0" class="form-input"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label for="planTraffic">Трафик (ГБ) <span
+                                class="label-hint">0=∞</span></label><input type="number" id="planTraffic"
+                            placeholder="0" min="0" class="form-input"></div>
+                    <div class="form-group"><label for="planMaxDevices">Устройства <span
+                                class="label-hint">0=∞</span></label><input type="number" id="planMaxDevices"
+                            placeholder="2" min="0" class="form-input"></div>
+                </div>
+                <div class="form-group"><label for="planDescription">Описание</label><textarea id="planDescription"
+                        placeholder="Идеально для 1-2 устройств" class="form-input form-textarea" rows="2"></textarea>
+                </div>
+                <div class="form-group"><label>Шаблоны серверов</label>
+                    <div class="key-select-list" id="planTplSelectList"></div>
+                </div>
+                <div class="toggle-row" style="margin-top:8px">
+                    <label>⭐ Популярный (выделить)</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="planPopular">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <input type="hidden" id="planEditId" value="">
+            </div>
+            <div class="modal-footer"><button class="btn-outline" data-close="modalAddPlan">Отмена</button><button
+                    class="btn-primary" id="btnSavePlan">Создать</button></div>
+        </div>
+    </div>
+
+    <!-- User Profile Modal -->
+    <div class="modal-overlay" id="modalUserProfile">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 id="userProfileTitle">Профиль</h3><button class="modal-close" data-close="modalUserProfile"><svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="sub-badges" id="userBadges"></div>
+                <div class="sub-detail-section">
+                    <div class="sub-stats-row" id="userInfoRow"></div>
+                </div>
+                <div class="sub-detail-section">
+                    <h4>💰 Баланс</h4>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <input type="number" id="userBalanceInput" class="form-input" style="max-width:120px"
+                            placeholder="0">
+                        <button class="btn-primary btn-sm" id="btnSetBalance">Установить</button>
+                        <button class="btn-outline btn-sm" id="btnAddBalance100">+100</button>
+                        <button class="btn-outline btn-sm" id="btnAddBalance500">+500</button>
+                        <button class="btn-outline btn-sm" id="btnAddBalance1000">+1000</button>
+                    </div>
+                </div>
+                <div class="sub-detail-section">
+                    <h4>📋 Назначить подписку</h4>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <input type="number" id="userSubDays" class="form-input" style="max-width:100px"
+                            placeholder="Дни" min="1">
+                        <button class="btn-primary btn-sm" id="btnAssignSub">Назначить</button>
+                        <button class="btn-outline btn-sm" id="btnAssignSub7">+7д</button>
+                        <button class="btn-outline btn-sm" id="btnAssignSub30">+30д</button>
+                        <button class="btn-outline btn-sm" id="btnAssignSub90">+90д</button>
+                    </div>
+                </div>
+                <div class="sub-detail-section">
+                    <h4>✉️ Написать пользователю</h4>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input type="text" id="userDmInput" class="form-input" placeholder="Сообщение..."
+                            style="flex:1">
+                        <button class="btn-primary btn-sm" id="btnSendDm">Отправить</button>
+                    </div>
+                </div>
+                <div class="sub-detail-section">
+                    <h4>📋 Подписки</h4>
+                    <div id="userSubsList"></div>
+                </div>
+                <div class="sub-detail-section">
+                    <h4>🛒 Заказы</h4>
+                    <div id="userOrdersList"></div>
+                </div>
+                <div class="sub-detail-section">
+                    <h4>💰 История баланса</h4>
+                    <div id="userBalanceHistory"></div>
+                </div>
+                <div class="sub-detail-section">
+                    <button class="btn-outline btn-full" id="btnToggleBlock">🔴 Заблокировать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add MTProxy Modal -->
+    <div class="modal-overlay" id="modalAddMtproxy">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalMtpTitle">Добавить MTProxy</h3><button class="modal-close"
+                    data-close="modalAddMtproxy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label for="mtpName">Название</label><input type="text" id="mtpName"
+                        placeholder="MTProxy #1" class="form-input"></div>
+                <div class="form-group"><label for="mtpHost">IP / Домен сервера</label><input type="text" id="mtpHost"
+                        placeholder="123.45.67.89" class="form-input"></div>
+                <div class="form-row">
+                    <div class="form-group"><label for="mtpPort">Порт MTProxy</label><input type="number" id="mtpPort"
+                            placeholder="443" class="form-input" value="443"></div>
+                    <div class="form-group"><label for="mtpSocksPort">SOCKS5 порт (локал)</label><input type="number"
+                            id="mtpSocksPort" placeholder="1080" class="form-input" value="1080"></div>
+                </div>
+                <div class="form-group"><label for="mtpSecret">Secret <span class="label-hint">(hex, 32 символа —
+                            генерируется автоматически)</span></label><input type="text" id="mtpSecret"
+                        placeholder="авто" class="form-input" style="font-family:monospace">
+                    <button class="btn-outline btn-sm" id="btnGenMtpSecret" style="margin-top:4px;width:auto">🎲
+                        Генерировать</button>
+                </div>
+                <div class="form-group"><label for="mtpAdTag">Ad Tag <span class="label-hint">(от @MTProxybot —
+                            спонсорский канал)</span></label><input type="text" id="mtpAdTag"
+                        placeholder="Вставьте ad tag" class="form-input" style="font-family:monospace"></div>
+                <div class="form-group">
+                    <label for="mtpVlessUri">VLESS сервер для проксирования <span class="label-hint">(куда отправлять
+                            Telegram трафик)</span></label>
+                    <select id="mtpVlessSelect" class="form-input" style="margin-bottom:4px">
+                        <option value="">— Выбрать из шаблона —</option>
+                    </select>
+                    <input type="text" id="mtpVlessUri" placeholder="vless://uuid@server:port?params#Name"
+                        class="form-input" style="font-family:monospace;font-size:0.75rem">
+                </div>
+                <div class="toggle-row" style="margin-top:8px">
+                    <label>Включён</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="mtpEnabled" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <input type="hidden" id="mtpEditId" value="">
+            </div>
+            <div class="modal-footer"><button class="btn-outline" data-close="modalAddMtproxy">Отмена</button><button
+                    class="btn-primary" id="btnSaveMtproxy">Сохранить</button></div>
+        </div>
+    </div>
+
+    <!-- MTProxy Detail Modal -->
+    <div class="modal-overlay" id="modalMtpDetail">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3 id="mtpDetailTitle">MTProxy</h3><button class="modal-close" data-close="modalMtpDetail"><svg
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="sub-badges" id="mtpBadges"></div>
+
+                <!-- QR -->
+                <div class="sub-detail-section">
+                    <h4>📲 QR-код подключения</h4>
+                    <div class="qr-container" id="mtpQrCode"></div>
+                </div>
+
+                <!-- Link -->
+                <div class="sub-detail-section">
+                    <h4>🔗 Ссылка для клиента</h4>
+                    <div class="sub-url-block">
+                        <div class="sub-url-display"><span class="sub-url-text" id="mtpLinkText"
+                                style="font-size:0.75rem">—</span></div>
+                        <button class="btn-primary btn-full" id="btnCopyMtpLink">📋 Копировать ссылку</button>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="sub-detail-section">
+                    <div class="sub-stats-row">
+                        <div class="sub-stat"><span class="sub-stat-label">Сервер</span><span class="sub-stat-value"
+                                id="mtpDetailHost">—</span></div>
+                        <div class="sub-stat"><span class="sub-stat-label">Порт</span><span class="sub-stat-value"
+                                id="mtpDetailPort">—</span></div>
+                        <div class="sub-stat"><span class="sub-stat-label">VLESS</span><span class="sub-stat-value"
+                                id="mtpDetailVless">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Ad Tag -->
+                <div class="sub-detail-section">
+                    <h4>📢 Спонсорский канал</h4>
+                    <p class="sub-notes-text" id="mtpDetailAdTag" style="font-family:monospace;font-size:0.8rem">—</p>
+                </div>
+
+                <!-- Setup command -->
+                <div class="sub-detail-section">
+                    <h4>🛠 Команда установки</h4>
+                    <div class="sub-url-block">
+                        <div class="sub-url-display"><span class="sub-url-text" id="mtpDetailSetupCmd"
+                                style="font-size:0.7rem;font-family:monospace">—</span></div>
+                        <button class="btn-outline btn-full" id="btnCopyMtpDetailSetup">📋 Копировать</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WhatsApp Proxy Modal -->
+    <div class="modal-overlay" id="modalAddWaProxy">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="waProxyModalTitle">Добавить WhatsApp Proxy</h3><button class="modal-close"
+                    data-close="modalAddWaProxy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label for="waName">Название</label><input type="text" id="waName"
+                        class="form-input" placeholder="WhatsApp Proxy #1"></div>
+                <div class="form-group"><label for="waHost">IP / Домен сервера</label><input type="text" id="waHost"
+                        class="form-input" placeholder="123.45.67.89 или proxy.domain.com"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group"><label for="waPort">Порт HTTPS</label><input type="number" id="waPort"
+                            class="form-input" value="443" min="1" max="65535"></div>
+                    <div class="form-group"><label for="waSocksPort">SOCKS5 порт (локал)</label><input type="number"
+                            id="waSocksPort" class="form-input" value="1090" min="1" max="65535"></div>
+                </div>
+                <div class="form-group">
+                    <label>VLESS сервер для проксирования <small>(куда направлять трафик WhatsApp)</small></label>
+                    <select id="waVlessSelect" class="form-input" style="margin-bottom:8px">
+                        <option value="">— Выбрать из шаблона —</option>
+                    </select>
+                    <input type="text" id="waVlessUri" class="form-input"
+                        placeholder="vless://uuid@server:port?params#Name" style="font-size:0.75rem">
+                </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:12px">
+                    <label style="margin:0">Включён</label>
+                    <label class="switch"><input type="checkbox" id="waEnabled" checked><span
+                            class="slider"></span></label>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn-outline" data-close="modalAddWaProxy">Отмена</button><button
+                    class="btn-primary" id="btnSaveWaProxy"
+                    onclick="window._handleSaveWaProxy && window._handleSaveWaProxy()">Сохранить</button></div>
+        </div>
+    </div>
+
+    <!-- Broadcast Modal -->
+    <div class="modal-overlay" id="modalBroadcast">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>📢 Рассылка</h3><button class="modal-close" data-close="modalBroadcast"><svg viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px">
+                    Сообщение будет отправлено всем незаблокированным пользователям через бота.
+                </p>
+                <div class="form-group"><label for="broadcastText">Текст сообщения</label><textarea id="broadcastText"
+                        placeholder="Введите текст рассылки..." class="form-input form-textarea" rows="5"></textarea>
+                </div>
+                <div id="broadcastStatus" style="font-size:0.85rem;color:var(--text-secondary);margin-top:8px"></div>
+            </div>
+            <div class="modal-footer"><button class="btn-outline" data-close="modalBroadcast">Отмена</button><button
+                    class="btn-primary" id="btnSendBroadcast">📢 Отправить</button></div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+    <script src="app.js"></script>
+    <script>if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => { }); }</script>
+</body>
+
+</html>

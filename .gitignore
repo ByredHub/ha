@@ -1,0 +1,22 @@
+node_modules/
+
+# Runtime data and secrets
+data.json
+xray-raw.json
+test-vless.json
+keys-extracted.txt
+vless-keys.txt
+Untitled
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime uploads/logs
+public/uploads/
+logs/
+*.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

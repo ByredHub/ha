@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <title>HappVPN</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #07070f;
+            --bg2: #0c0c1a;
+            --card: rgba(16, 16, 32, 0.72);
+            --card2: rgba(22, 22, 44, 0.6);
+            --glass: rgba(255, 255, 255, 0.035);
+            --border: rgba(255, 255, 255, 0.06);
+            --border2: rgba(255, 255, 255, 0.1);
+            --glow: rgba(99, 102, 241, 0.45);
+            --glow2: rgba(6, 182, 212, 0.3);
+            --t1: #eef0ff;
+            --t2: rgba(238, 240, 255, 0.55);
+            --t3: rgba(238, 240, 255, 0.28);
+            --ac: #6366f1;
+            --ac2: #818cf8;
+            --cy: #06b6d4;
+            --gn: #10b981;
+            --rd: #ef4444;
+            --am: #f59e0b;
+            --gr: linear-gradient(135deg, #6366f1, #06b6d4);
+            --safe: env(safe-area-inset-bottom, 0px);
+        }
+
+        html {
+            font-size: 16px
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--t1);
+            min-height: 100vh;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            padding-bottom: calc(82px + var(--safe))
+        }
+
+        .aurora {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden
+        }
+
+        .ob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: .18;
+            animation: ob 22s ease-in-out infinite
+        }
+
+        .ob1 {
+            width: 340px;
+            height: 340px;
+            background: radial-gradient(circle, #6366f1, transparent 70%);
+            top: -12%;
+            right: -6%
+        }
+
+        .ob2 {
+            width: 270px;
+            height: 270px;
+            background: radial-gradient(circle, #06b6d4, transparent 70%);
+            bottom: 8%;
+            left: -8%;
+            animation-delay: -8s
+        }
+
+        @keyframes ob {
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1)
+            }
+
+            50% {
+                transform: translate(20px, -30px) scale(1.1)
+            }
+        }
+
+        .w {
+            position: relative;
+            z-index: 1;
+            max-width: 460px;
+            margin: 0 auto;
+            padding: 0 16px
+        }
+
+        /* HEADER */
+        .hdr {
+            text-align: center;
+            padding: 18px 0 14px
+        }
+
+        .hdr-shield {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 8px;
+            position: relative
+        }
+
+        .hdr-shield svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 2px 12px rgba(99, 102, 241, .4))
+        }
+
+        .hdr-n {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            background: var(--gr);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .hdr-s {
+            font-size: .76rem;
+            color: var(--t2);
+            margin-top: 2px
+        }
+
+        /* NAV */
+        .nav {
+            position: fixed;
+            bottom: 14px;
+            left: 10px;
+            right: 10px;
+            width: auto;
+            z-index: 50;
+            background: rgba(7, 7, 15, .95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 6px 2px
+        }
+
+        .nav-in {
+            display: flex;
+            max-width: 460px;
+            margin: 0 auto;
+            padding: 0 4px
+        }
+
+        .nb {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 6px 2px;
+            background: 0;
+            border: 0;
+            color: var(--t3);
+            font-family: inherit;
+            font-size: .58rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .2s;
+            border-radius: 8px;
+            letter-spacing: .02em
+        }
+
+        .nb svg {
+            width: 20px;
+            height: 20px;
+            stroke-width: 1.8;
+            transition: .2s
+        }
+
+        .nb.on {
+            color: var(--ac2)
+        }
+
+        .nb.on svg {
+            filter: drop-shadow(0 0 6px var(--glow))
+        }
+
+        .nb:active {
+            transform: scale(.9)
+        }
+
+        /* PAGES */
+        .pg {
+            display: none;
+            animation: pi .25s ease
+        }
+
+        .pg.on {
+            display: block
+        }
+
+        @keyframes pi {
+            from {
+                opacity: 0;
+                transform: translateY(6px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        /* CARDS */
+        .cd {
+            background: var(--card);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 10px;
+            transition: .2s
+        }
+
+        .cd:hover {
+            border-color: var(--border2)
+        }
+
+        .cd-glow {
+            position: relative;
+            overflow: hidden
+        }
+
+        .cd-glow::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--gr);
+            opacity: .7
+        }
+
+        .cd-t {
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--t3);
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .cd-t svg {
+            width: 14px;
+            height: 14px;
+            opacity: .5
+        }
+
+        .cd-v {
+            font-size: 1.7rem;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            line-height: 1.1
+        }
+
+        .cd-h {
+            font-size: .76rem;
+            color: var(--t2);
+            margin-top: 4px
+        }
+
+        .gt {
+            background: var(--gr);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        /* STATS */
+        .sts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px
+        }
+
+        .st {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        .st:hover {
+            border-color: var(--border2);
+            transform: translateY(-1px)
+        }
+
+        .st:active {
+            transform: scale(.97)
+        }
+
+        .st-i {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px
+        }
+
+        .st-i svg {
+            width: 16px;
+            height: 16px
+        }
+
+        .st-v {
+            font-size: 1.15rem;
+            font-weight: 800
+        }
+
+        .st-l {
+            font-size: .62rem;
+            color: var(--t3);
+            margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            font-weight: 600
+        }
+
+        /* PROGRESS */
+        .pb {
+            height: 5px;
+            background: rgba(255, 255, 255, .06);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 8px
+        }
+
+        .pb-f {
+            height: 100%;
+            border-radius: 5px;
+            transition: width .8s ease
+        }
+
+        .pb-i {
+            display: flex;
+            justify-content: space-between;
+            font-size: .7rem;
+            color: var(--t3);
+            margin-top: 4px
+        }
+
+        /* BADGE */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px
+        }
+
+        .badge-gn {
+            background: rgba(16, 185, 129, .1);
+            color: var(--gn);
+            border: 1px solid rgba(16, 185, 129, .2)
+        }
+
+        .badge-rd {
+            background: rgba(239, 68, 68, .1);
+            color: var(--rd);
+            border: 1px solid rgba(239, 68, 68, .2)
+        }
+
+        .badge-am {
+            background: rgba(245, 158, 11, .1);
+            color: var(--am);
+            border: 1px solid rgba(245, 158, 11, .2)
+        }
+
+        /* URL BOX */
+        .url {
+            background: rgba(99, 102, 241, .05);
+            border: 1px solid rgba(99, 102, 241, .12);
+            border-radius: 10px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: .7rem;
+            color: var(--ac2);
+            word-break: break-all;
+            line-height: 1.5;
+            cursor: pointer;
+            transition: .2s;
+            position: relative
+        }
+
+        .url:hover {
+            border-color: rgba(99, 102, 241, .35)
+        }
+
+        .url.cp {
+            border-color: rgba(16, 185, 129, .4);
+            background: rgba(16, 185, 129, .06)
+        }
+
+        /* BUTTONS */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            width: 100%;
+            padding: 13px;
+            border: 0;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: .86rem;
+            font-weight: 650;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        .btn:active {
+            transform: scale(.97)
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px
+        }
+
+        .btn-p {
+            background: var(--gr);
+            color: #fff;
+            box-shadow: 0 4px 18px rgba(99, 102, 241, .3)
+        }
+
+        .btn-p:hover {
+            box-shadow: 0 4px 28px rgba(99, 102, 241, .5)
+        }
+
+        .btn-g {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(16, 185, 129, .25)
+        }
+
+        .btn-o {
+            background: 0;
+            color: var(--t2);
+            border: 1px solid var(--border)
+        }
+
+        .btn-o:hover {
+            border-color: var(--glow);
+            color: var(--t1)
+        }
+
+        .btn+.btn {
+            margin-top: 8px
+        }
+
+        .btn-gr {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px
+        }
+
+        .btn-gr .btn {
+            margin: 0
+        }
+
+        /* PLAN CARDS */
+        .pl {
+            position: relative;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-left: 3px solid transparent;
+            border-image: linear-gradient(to bottom, #6366f1, #06b6d4) 1;
+            border-image-slice: 0 0 0 1;
+            border-radius: 14px;
+            padding: 18px 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: .25s;
+            overflow: hidden
+        }
+
+        .pl::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(99, 102, 241, .04), transparent 60%);
+            pointer-events: none;
+            opacity: 0;
+            transition: .25s
+        }
+
+        .pl:hover {
+            border-color: var(--glow);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(99, 102, 241, .12)
+        }
+
+        .pl:hover::after {
+            opacity: 1
+        }
+
+        .pl:active {
+            transform: translateY(0) scale(.98)
+        }
+
+        .pl.pop {
+            border-color: rgba(99, 102, 241, .25);
+            background: linear-gradient(135deg, rgba(99, 102, 241, .06), rgba(6, 182, 212, .03));
+            box-shadow: 0 0 20px rgba(99, 102, 241, .08)
+        }
+
+        .pl.pop::after {
+            opacity: 1
+        }
+
+        .pl-bg {
+            position: absolute;
+            top: 0;
+            right: 16px;
+            background: var(--gr);
+            color: #fff;
+            font-size: .56rem;
+            font-weight: 700;
+            padding: 3px 10px 4px;
+            border-radius: 0 0 8px 8px;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, .3)
+        }
+
+        .pl-n {
+            font-size: 1.06rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+            letter-spacing: -.01em
+        }
+
+        .pl-d {
+            font-size: .78rem;
+            color: var(--t2);
+            margin-bottom: 12px;
+            line-height: 1.4
+        }
+
+        .pl-fs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 14px
+        }
+
+        .pl-f {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: .7rem;
+            font-weight: 500;
+            color: var(--t1);
+            background: rgba(99, 102, 241, .08);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid rgba(99, 102, 241, .12)
+        }
+
+        .pl-f svg {
+            width: 12px;
+            height: 12px;
+            opacity: .7
+        }
+
+        .pl-bot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 2px
+        }
+
+        .pl-pr {
+            font-size: 1.5rem;
+            font-weight: 900;
+            letter-spacing: -.02em
+        }
+
+        /* REF */
+        .ref-c {
+            background: var(--card2);
+            border: 1px dashed var(--border2);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        .ref-c:hover {
+            border-color: var(--ac);
+            background: rgba(99, 102, 241, .04)
+        }
+
+        .ref-v {
+            font-size: 1.2rem;
+            font-weight: 800;
+            font-family: 'Courier New', monospace;
+            letter-spacing: .1em;
+            color: var(--ac2);
+            margin-top: 6px
+        }
+
+        .ref-sts {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 10px
+        }
+
+        .ref-st {
+            text-align: center;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 6px
+        }
+
+        .ref-st-v {
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 2px
+        }
+
+        /* TICKETS */
+        .tkt {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: .2s
+        }
+
+        .tkt:hover {
+            border-color: var(--border2)
+        }
+
+        .tkt-top {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 3px
+        }
+
+        .tkt-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0
+        }
+
+        .tkt-dot.op {
+            background: var(--gn);
+            box-shadow: 0 0 6px rgba(16, 185, 129, .4)
+        }
+
+        .tkt-dot.cl {
+            background: var(--t3)
+        }
+
+        .tkt-sub {
+            font-size: .86rem;
+            font-weight: 600;
+            flex: 1
+        }
+
+        .tkt-dt {
+            font-size: .66rem;
+            color: var(--t3)
+        }
+
+        .tkt-pv {
+            font-size: .76rem;
+            color: var(--t2);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        /* CHAT */
+        .chat {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 10px;
+            max-height: 380px;
+            overflow-y: auto;
+            padding: 4px
+        }
+
+        .mg {
+            max-width: 82%;
+            padding: 10px 13px;
+            border-radius: 14px;
+            font-size: .84rem;
+            line-height: 1.4;
+            animation: mi .2s ease
+        }
+
+        @keyframes mi {
+            from {
+                opacity: 0;
+                transform: translateY(4px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .mg-u {
+            align-self: flex-end;
+            background: var(--ac);
+            color: #fff;
+            border-bottom-right-radius: 4px
+        }
+
+        .mg-a {
+            align-self: flex-start;
+            background: var(--card2);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px
+        }
+
+        .mg-t {
+            font-size: .6rem;
+            opacity: .5;
+            margin-top: 3px
+        }
+
+        .mg-iw {
+            display: flex;
+            gap: 8px
+        }
+
+        .mg-in {
+            flex: 1;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            color: var(--t1);
+            font-family: inherit;
+            font-size: .84rem;
+            outline: 0;
+            resize: none;
+            transition: .2s
+        }
+
+        .mg-in:focus {
+            border-color: var(--glow)
+        }
+
+        .mg-in::placeholder {
+            color: var(--t3)
+        }
+
+        .mg-sb {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: var(--gr);
+            border: 0;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: .2s
+        }
+
+        .mg-sb:active {
+            transform: scale(.88)
+        }
+
+        .mg-sb svg {
+            width: 18px;
+            height: 18px
+        }
+
+        /* MODAL */
+        .mo {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .6);
+            backdrop-filter: blur(8px);
+            z-index: 60;
+            display: none;
+            align-items: flex-end;
+            justify-content: center
+        }
+
+        .mo.on {
+            display: flex
+        }
+
+        .mo-s {
+            background: var(--bg2);
+            border-radius: 18px 18px 0 0;
+            width: 100%;
+            max-width: 460px;
+            max-height: 82vh;
+            overflow-y: auto;
+            padding: 16px 16px calc(16px + var(--safe));
+            animation: su .3s ease;
+            border-top: 1px solid var(--border2)
+        }
+
+        @keyframes su {
+            from {
+                transform: translateY(100%)
+            }
+
+            to {
+                transform: translateY(0)
+            }
+        }
+
+        .mo-h {
+            width: 32px;
+            height: 3px;
+            background: rgba(255, 255, 255, .1);
+            border-radius: 3px;
+            margin: 0 auto 12px
+        }
+
+        .mo-t {
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 12px
+        }
+
+        /* SECTION */
+        .sec {
+            font-size: .88rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .sec svg {
+            width: 16px;
+            height: 16px;
+            opacity: .5
+        }
+
+        /* INPUT */
+        .inp {
+            width: 100%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 13px;
+            color: var(--t1);
+            font-family: inherit;
+            font-size: .86rem;
+            outline: 0;
+            transition: .2s
+        }
+
+        .inp:focus {
+            border-color: var(--glow)
+        }
+
+        .inp::placeholder {
+            color: var(--t3)
+        }
+
+        .ig {
+            margin-bottom: 10px
+        }
+
+        .il {
+            font-size: .72rem;
+            color: var(--t3);
+            margin-bottom: 5px;
+            font-weight: 600
+        }
+
+        /* MISC */
+        .emp {
+            text-align: center;
+            padding: 28px 14px;
+            color: var(--t3)
+        }
+
+        .emp-i {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            opacity: .4
+        }
+
+        .emp-t {
+            font-size: .88rem;
+            font-weight: 600;
+            color: var(--t2);
+            margin-bottom: 3px
+        }
+
+        .emp-d {
+            font-size: .76rem
+        }
+
+        .ld {
+            text-align: center;
+            padding: 28px;
+            color: var(--t3)
+        }
+
+        .sp {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--ac);
+            border-radius: 50%;
+            animation: ro .7s linear infinite;
+            margin: 0 auto 8px
+        }
+
+        @keyframes ro {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 86px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--gn);
+            color: #fff;
+            padding: 9px 20px;
+            border-radius: 10px;
+            font-size: .82rem;
+            font-weight: 600;
+            z-index: 200;
+            opacity: 0;
+            transition: .3s;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .3);
+            pointer-events: none
+        }
+
+        .toast.on {
+            opacity: 1
+        }
+
+        /* Inline SVG sizing */
+        .cd-t svg,
+        .cd-h svg,
+        .sec svg,
+        .st-i svg,
+        .pl-f svg,
+        .emp-i svg,
+        .ref-c svg,
+        .ref-st svg {
+            width: 14px;
+            height: 14px;
+            display: inline-block;
+            vertical-align: middle;
+            flex-shrink: 0
+        }
+
+        .st-i svg {
+            width: 16px;
+            height: 16px
+        }
+
+        .emp-i svg {
+            width: 36px;
+            height: 36px;
+            opacity: .4
+        }
+
+        .cd-h svg {
+            width: 13px;
+            height: 13px
+        }
+
+        ::-webkit-scrollbar {
+            width: 3px
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, .06);
+            border-radius: 3px
+        }
+    </style>
+</head>
+
+<body>
+    <div class="aurora">
+        <div class="ob ob1"></div>
+        <div class="ob ob2"></div>
+    </div>
+    <div class="w">
+        <div class="hdr">
+            <div class="hdr-shield"><svg viewBox="0 0 48 48" fill="none">
+                    <defs>
+                        <linearGradient id="sg" x1="0" y1="0" x2="48" y2="48">
+                            <stop stop-color="#6366f1" />
+                            <stop offset="1" stop-color="#06b6d4" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M24 4L6 12v12c0 11 8 20 18 22 10-2 18-11 18-22V12L24 4z" fill="url(#sg)" />
+                    <path d="M18 24l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg></div>
+            <div class="hdr-n" id="hN">HappVPN</div>
+            <div class="hdr-s" id="hS">Быстрый и безопасный VPN</div>
+        </div>
+        <div class="pg on" id="pg-home">
+            <div id="hC">
+                <div class="ld">
+                    <div class="sp"></div>
+                </div>
+            </div>
+        </div>
+        <div class="pg" id="pg-sub">
+            <div id="sC">
+                <div class="ld">
+                    <div class="sp"></div>
+                </div>
+            </div>
+        </div>
+        <div class="pg" id="pg-bal">
+            <div id="bC">
+                <div class="ld">
+                    <div class="sp"></div>
+                </div>
+            </div>
+        </div>
+        <div class="pg" id="pg-ref">
+            <div id="rC">
+                <div class="ld">
+                    <div class="sp"></div>
+                </div>
+            </div>
+        </div>
+        <div class="pg" id="pg-help">
+            <div id="pC">
+                <div class="ld">
+                    <div class="sp"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <nav class="nav">
+        <div class="nav-in">
+            <button class="nb on" data-p="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                </svg><span>Главная</span></button>
+            <button class="nb" data-p="sub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                </svg><span>Подписка</span></button>
+            <button class="nb" data-p="bal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M16 8h-6a2 2 0 100 4h4a2 2 0 010 4H8" />
+                    <path d="M12 6v2m0 8v2" />
+                </svg><span>Баланс</span></button>
+            <button class="nb" data-p="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+                </svg><span>Рефералы</span></button>
+            <button class="nb" data-p="help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                </svg><span>Поддержка</span></button>
+        </div>
+    </nav>
+    <div class="mo" id="mo">
+        <div class="mo-s" id="moS">
+            <div class="mo-h"></div>
+            <div id="moB"></div>
+        </div>
+    </div>
+    <div class="toast" id="tst"></div>
+    <script>
+        (function () {
+            'use strict';
+            const tg = window.Telegram?.WebApp; if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#07070f'); tg.setBackgroundColor('#07070f') } catch { } }
+            const uid = tg?.initDataUnsafe?.user?.id || 0, uname = tg?.initDataUnsafe?.user?.first_name || '';
+            console.log('TG WebApp uid:', uid, 'initData:', tg?.initData ? 'present' : 'empty');
+            let cfg = {}, plans = [], ud = {}, tickets = [];
+            const $ = s => document.getElementById(s);
+            const _s = 'style="width:16px;height:16px;min-width:16px;display:inline-block;vertical-align:middle;flex-shrink:0"';
+            const I = {
+                shield: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L3 7v5c0 7 4 13 9 14 5-1 9-7 9-14V7l-9-5z"/></svg>`,
+                clock: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+                device: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`,
+                chart: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 20 9 4 6 12 2 12"/></svg>`,
+                wallet: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 10H16a2 2 0 000 4h6"/></svg>`,
+                users: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/></svg>`,
+                link: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`,
+                copy: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`,
+                send: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
+                plus: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+                check: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
+                zap: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+                gift: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 110-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>`,
+                share: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
+            };
+            async function api(u) { const r = await fetch(u); if (!r.ok) throw 0; return r.json() }
+            async function post(u, b) { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); return r.json() }
+            function toast(m) { const t = $('tst'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2500) }
+            function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML }
+            function fD(d) { if (!d || d <= 0) return '∞'; return { 1: '1 день', 7: '1 нед', 30: '1 мес', 60: '2 мес', 90: '3 мес', 180: '6 мес', 365: '1 год' }[d] || d + ' дн' }
+            function fT(g) { if (!g || g <= 0) return '∞'; return g >= 1000 ? (g / 1000 | 0) + ' TB' : g + ' GB' }
+            function tL(ts) { if (!ts) return '∞'; const d = ts - Date.now(); if (d <= 0) return 'Истекла'; const dy = d / 864e5 | 0, h = (d % 864e5) / 36e5 | 0; return dy > 0 ? dy + ' дн ' + h + ' ч' : h + ' ч' }
+            function cp(t) { navigator.clipboard.writeText(t).then(() => toast('✅ Скопировано')).catch(() => { const i = document.createElement('input'); i.value = t; document.body.appendChild(i); i.select(); document.execCommand('copy'); document.body.removeChild(i); toast('✅ Скопировано') }) }
+
+            function go(p) {
+                document.querySelectorAll('.pg').forEach(x => x.classList.remove('on')); document.querySelectorAll('.nb').forEach(x => x.classList.remove('on'));
+                const e = $('pg-' + p); if (e) e.classList.add('on'); document.querySelectorAll('.nb').forEach(x => { if (x.dataset.p === p) x.classList.add('on') });
+                ({ home: rH, sub: rS, bal: rB, ref: rR, help: rP })[p]?.()
+            }
+            document.querySelectorAll('.nb').forEach(b => b.addEventListener('click', () => go(b.dataset.p)));
+
+            function oM(h) { $('moB').innerHTML = h; $('mo').classList.add('on') }
+            function cM() { $('mo').classList.remove('on') }
+            $('mo').addEventListener('click', e => { if (e.target === $('mo')) cM() });
+            let ty = 0; $('moS').addEventListener('touchstart', e => { ty = e.touches[0].clientY });
+            $('moS').addEventListener('touchmove', e => { if (e.touches[0].clientY - ty > 50) cM() });
+
+            async function load() {
+                try {
+                    const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uid ? api('/api/shop/user-data?userId=' + uid) : {}]);
+                    cfg = s; plans = p; ud = u; $('hN').textContent = s.shopName || s.title || 'HappVPN'; $('hS').textContent = s.shopWelcomeShort || 'Быстрый и безопасный VPN'; rH()
+                }
+                catch { $('hC').innerHTML = '<div class="emp"><div class="emp-i">' + I.shield + '</div><div class="emp-t">Ошибка загрузки</div></div>' }
+            }
+
+            // HOME
+            function rH() {
+                const s = ud.activeSub, bal = ud.balance || 0, refs = ud.referralCount || 0, cur = cfg.currency || '₽'; let sh = '';
+                if (s) {
+                    const ie = s.expiresAt && Date.now() > s.expiresAt, id = s.enabled === false, bc = id ? 'badge-rd' : ie ? 'badge-am' : 'badge-gn', bt = id ? 'Отключена' : ie ? 'Истекла' : 'Активна';
+                    const dv = (s.devices || []).length, mx = s.maxDevices > 0 ? s.maxDevices : '∞'; let tf = '';
+                    if (s.trafficTotal > 0) {
+                        const u = s.trafficUsed || 0, pc = Math.min(100, u / s.trafficTotal * 100), us = u < 1 ? (u * 1024 | 0) + ' MB' : u.toFixed(1) + ' GB', cl = pc > 90 ? 'var(--rd)' : pc > 70 ? 'var(--am)' : 'var(--gn)';
+                        tf = `<div class="pb"><div class="pb-f" style="width:${pc}%;background:${cl}"></div></div><div class="pb-i"><span>${us} / ${s.trafficTotal} GB</span><span>${pc | 0}%</span></div>`
+                    }
+                    sh = `<div class="cd cd-glow"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="cd-t" style="margin:0">${I.shield} Статус</div><span class="badge ${bc}">${bt}</span></div>
+<div class="sts" style="margin:0"><div class="st" style="cursor:default"><div class="st-i" style="background:rgba(99,102,241,.1)">${I.clock}</div><div class="st-v">${esc(tL(s.expiresAt))}</div><div class="st-l">Осталось</div></div>
+<div class="st" onclick="oDV()" style="cursor:pointer"><div class="st-i" style="background:rgba(6,182,212,.1)">${I.device}</div><div class="st-v">${dv}/${mx}</div><div class="st-l">Устройства</div></div></div>${tf}</div>`
+                }
+                else sh = `<div class="cd cd-glow"><div class="cd-t">${I.shield} Статус</div><div style="text-align:center;padding:10px 0"><span class="badge badge-rd">Нет подписки</span><p style="font-size:.8rem;color:var(--t2);margin-top:6px">Оформите подписку</p><button class="btn btn-p" style="margin-top:10px;max-width:200px;margin-left:auto;margin-right:auto" onclick="go('sub')">${I.zap} Купить</button></div></div>`;
+                $('hC').innerHTML = `<div class="cd" style="text-align:center;padding:18px"><div style="font-size:1.05rem;font-weight:700;margin-bottom:3px">Добро пожаловать${uname ? ', ' + esc(uname) : ''}!</div><div style="font-size:.8rem;color:var(--t2)">${esc(cfg.userBotWelcome || 'Ваш персональный VPN')}</div></div>
+${sh}<div class="sts"><div class="st" onclick="go('bal')"><div class="st-i" style="background:rgba(99,102,241,.1)">${I.wallet}</div><div class="st-v gt">${bal} ${esc(cur)}</div><div class="st-l">Баланс</div></div>
+<div class="st" onclick="go('ref')"><div class="st-i" style="background:rgba(168,85,247,.1)">${I.users}</div><div class="st-v" style="color:#a855f7">${refs}</div><div class="st-l">Рефералов</div></div></div>`
+            }
+
+            // SUBSCRIPTION
+            function rS() {
+                const s = ud.activeSub, cur = cfg.currency || '₽'; let h = '';
+                if (s) {
+                    const ie = s.expiresAt && Date.now() > s.expiresAt, id = s.enabled === false, bc = id ? 'badge-rd' : ie ? 'badge-am' : 'badge-gn', bt = id ? 'Отключена' : ie ? 'Истекла' : 'Активна', url = s.subUrl || '';
+                    h = `<div class="sec">${I.shield} Текущий тариф</div><div class="cd cd-glow"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:.98rem;font-weight:700">${esc(s.name)}</div><span class="badge ${bc}">${bt}</span></div>
+<div class="cd-h">${s.expiresAt ? I.clock + ' До: ' + new Date(s.expiresAt).toLocaleDateString('ru-RU') : 'Бессрочно'}${s.trafficTotal > 0 ? ' · ' + I.chart + ' ' + fT(s.trafficTotal) : ''}${s.maxDevices > 0 ? ' · ' + I.device + ' ' + s.maxDevices + ' устр.' : ''}</div></div>
+${url ? `<div class="sec">${I.link} Ссылка для подключения</div><div class="url" id="sU" data-u="${esc(url)}">${esc(url)}</div><button class="btn btn-p" style="margin-top:8px" onclick="cp('${esc(url)}')">${I.copy} Копировать ссылку</button>` : ''}
+${(cfg.devicePrice > 0 && s.maxDevices > 0) ? `<div class="sec" style="margin-top:14px">${I.device} Устройства</div><div class="cd" style="display:flex;align-items:center;justify-content:space-between"><div><div style="font-size:.9rem;font-weight:700">${(s.devices || []).length} / ${s.maxDevices}</div><div style="font-size:.72rem;color:var(--t3)">Подключено устройств</div></div><button class="btn btn-p" style="width:auto;padding:10px 18px;font-size:.82rem" onclick="oDV()">${I.plus} Докупить</button></div>` : ''}
+<div class="sec" style="margin-top:14px">${I.zap} Продлить подписку</div>`
+                }
+                else h = `<div class="emp"><div class="emp-i">${I.shield}</div><div class="emp-t">Нет подписки</div><div class="emp-d">Выберите тариф</div></div><div class="sec" style="margin-top:10px">${I.zap} Тарифы</div>`;
+                if (plans.length > 0) h += plans.map(p => `<div class="pl${p.popular ? ' pop' : ''}" data-id="${p.id}">${p.popular ? '<div class="pl-bg">★ HIT</div>' : ''}<div class="pl-n">${esc(p.name)}</div>${p.description ? `<div class="pl-d">${esc(p.description)}</div>` : ''}
+<div class="pl-fs"><span class="pl-f">${I.clock} ${fD(p.duration)}</span><span class="pl-f">${I.chart} ${fT(p.traffic)}</span><span class="pl-f">${I.device} ${p.maxDevices > 0 ? p.maxDevices + ' устр.' : '∞'}</span></div>
+<div class="pl-bot"><div class="pl-pr gt">${p.price} ${esc(cur)} <span style="font-size:.68rem;font-weight:500;-webkit-text-fill-color:var(--t3)">/ ${fD(p.duration)}</span></div><div style="width:32px;height:32px;border-radius:50%;background:var(--gr);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(99,102,241,.3)"><svg style="width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></div></div></div>`).join('');
+                else h += '<div class="emp"><div class="emp-t">Тарифы скоро</div></div>';
+                $('sC').innerHTML = h;
+                document.querySelectorAll('.pl[data-id]').forEach(e => e.addEventListener('click', () => { const p = plans.find(x => x.id === e.dataset.id); if (p) oPM(p) }));
+                const u = $('sU'); if (u) u.addEventListener('click', () => { cp(u.dataset.u); u.classList.add('cp'); setTimeout(() => u.classList.remove('cp'), 800) })
+            }
+
+            // PLAN MODAL
+            function oPM(p) {
+                const cur = cfg.currency || '₽', bal = ud.balance || 0, canBuy = bal >= p.price;
+                oM(`<div class="mo-t">${esc(p.name)}</div>
+<div class="cd cd-glow" style="text-align:center;padding:18px"><div class="cd-v gt">${p.price} ${esc(cur)}</div><div class="cd-h">${fD(p.duration)} · ${fT(p.traffic)} · ${p.maxDevices > 0 ? p.maxDevices : '∞'} устр.</div></div>
+${p.description ? `<div class="cd"><div style="font-size:.84rem;color:var(--t2)">${esc(p.description)}</div></div>` : ''}
+<div class="cd"><div class="cd-t">${I.check} Что входит</div><div style="font-size:.84rem;color:var(--t2);line-height:1.8">${I.zap} Высокая скорость<br>${I.shield} Без логов<br>${I.link} Обход блокировок</div></div>
+${canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wallet} Баланс</div><div style="font-size:.9rem;font-weight:700;color:var(--gn)">Достаточно: ${bal} ${esc(cur)}</div></div>
+<button class="btn btn-g" id="bBuy" data-id="${p.id}">${I.check} Купить с баланса</button>`
+                        : `<div class="cd"><div class="cd-t">${I.wallet} Оплата</div><div style="font-size:.86rem;line-height:1.6;white-space:pre-wrap">${esc(cfg.paymentInfo || 'Реквизиты не заданы')}</div></div>
+<p style="font-size:.72rem;color:var(--t3);text-align:center;margin:8px 0">После оплаты отправьте скриншот боту</p>
+<button class="btn btn-p" id="bPay" data-id="${p.id}">${I.send} Я оплатил</button>`}
+<button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                const bb = $('bBuy'); if (bb) bb.addEventListener('click', () => buyBal(p));
+                const bp = $('bPay'); if (bp) bp.addEventListener('click', () => mkOrd(p))
+            }
+
+            async function buyBal(p) {
+                const b = $('bBuy'); b.disabled = true; b.innerHTML = '⏳ Покупка...';
+                try { const r = await post('/api/shop/buy-with-balance', { planId: p.id, userId: uid }); if (r.ok) { cM(); toast('✅ Подписка активирована!'); ud.balance = r.balance; setTimeout(() => load(), 500) } } catch { toast('❌ Ошибка'); b.disabled = false; b.innerHTML = I.check + ' Купить с баланса' }
+            }
+
+            async function mkOrd(p) {
+                oM(`<div class="mo-t">${I.check} Подтверждение оплаты</div>
+<div class="cd" style="text-align:center;padding:16px">
+<div style="font-size:.9rem;font-weight:700;margin-bottom:8px">📸 Прикрепите чек об оплате</div>
+<div style="font-size:.78rem;color:var(--t2);margin-bottom:12px">Сделайте скриншот или фото чека</div>
+<input type="file" accept="image/*" id="rFile" style="display:none">
+<div id="dropZ" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px;border:2px dashed var(--border2);border-radius:12px;cursor:pointer;transition:.2s">
+<svg style="width:32px;height:32px;opacity:.4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+<span style="font-size:.78rem;color:var(--t3)" id="fLabel">Нажмите, чтобы выбрать фото</span>
+</div>
+<img id="rPrev" style="display:none;max-width:100%;max-height:200px;border-radius:10px;margin-top:10px;object-fit:contain">
+</div>
+<button class="btn btn-p" id="bConf" disabled style="opacity:.5">${I.send} Отправить чек</button>
+<button class="btn btn-o" onclick="cM()">Назад</button>`);
+                let receiptData = null;
+                const fi = $('rFile'), prev = $('rPrev'), lbl = $('fLabel'), dz = $('dropZ'), btn = $('bConf');
+                dz.onclick = function (e) { e.preventDefault(); e.stopPropagation(); fi.click() };
+                fi.onchange = function () {
+                    const f = fi.files[0]; if (!f) return;
+                    if (f.size > 10 * 1024 * 1024) { toast('❌ Макс 10 МБ'); return }
+                    const r = new FileReader();
+                    r.onload = function (e) { receiptData = e.target.result; prev.src = receiptData; prev.style.display = 'block'; lbl.textContent = '✅ ' + f.name; dz.style.borderColor = 'var(--ac)'; dz.style.borderStyle = 'solid'; btn.disabled = false; btn.style.opacity = '1' };
+                    r.readAsDataURL(f);
+                };
+                btn.onclick = async function () {
+                    if (!receiptData) { toast('Прикрепите чек'); return }
+                    btn.disabled = true; btn.innerHTML = '⏳ Отправляем...';
+                    try {
+                        await post('/api/shop/create-order', { planId: p.id, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname, receipt: receiptData });
+                        cM(); toast('✅ Заказ создан! Ожидайте подтверждения.'); setTimeout(() => load(), 500)
+                    } catch { toast('❌ Ошибка'); btn.disabled = false; btn.innerHTML = I.send + ' Отправить чек' }
+                }
+            }
+
+            // BALANCE
+            function rB() {
+                const bal = ud.balance || 0, cur = cfg.currency || '₽', hist = ud.balanceHistory || [];
+                let hh = ''; if (hist.length > 0) {
+                    hh = `<div class="sec" style="margin-top:12px">${I.clock} История</div>` + hist.slice(0, 15).map(h => `<div class="cd" style="padding:11px;margin-bottom:5px;display:flex;align-items:center;gap:10px">
+<div style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:${h.amount > 0 ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.1)'}">${h.amount > 0 ? I.plus : I.chart}</div>
+<div style="flex:1"><div style="font-size:.82rem;font-weight:600">${esc(h.description || '')}</div><div style="font-size:.66rem;color:var(--t3)">${new Date(h.date).toLocaleDateString('ru-RU')}</div></div>
+<div style="font-weight:700;color:${h.amount > 0 ? 'var(--gn)' : 'var(--rd)'}">${h.amount > 0 ? '+' : ''}${h.amount} ${esc(cur)}</div></div>`).join('')
+                }
+                $('bC').innerHTML = `<div class="cd cd-glow" style="text-align:center;padding:22px"><div class="cd-t" style="justify-content:center">${I.wallet} Текущий баланс</div><div class="cd-v gt">${bal} ${esc(cur)}</div><div class="cd-h">Для мгновенной покупки подписки</div></div>
+<div class="btn-gr"><button class="btn btn-p" onclick="showTU()">${I.plus} Пополнить</button><button class="btn btn-g" onclick="go('ref')">${I.gift} Заработать</button></div>${hh}`
+            }
+
+            function showTU() {
+                const cur = cfg.currency || '₽';
+                oM(`<div class="mo-t">${I.plus} Пополнить баланс</div><div class="cd"><div class="cd-t">${I.wallet} ${esc(cfg.paymentMethod || 'Оплата')}</div><div style="font-size:.86rem;white-space:pre-wrap;line-height:1.6">${esc(cfg.paymentInfo || 'Реквизиты не заданы')}</div></div>
+<div class="ig"><div class="il">Сумма (${esc(cur)})</div><input class="inp" type="number" id="tuA" placeholder="500" min="1"></div>
+<button class="btn btn-p" id="tuB">${I.send} Отправить заявку</button><button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                $('tuB').addEventListener('click', async () => { const a = parseInt($('tuA').value) || 0; if (a <= 0) { toast('Укажите сумму'); return } try { await post('/api/shop/top-up', { userId: uid, amount: a, firstName: uname }); cM(); toast('✅ Заявка отправлена') } catch { toast('❌ Ошибка') } })
+            }
+
+            // REFERRALS
+            function rR() {
+                const rc = ud.referralCode || '—', rn = ud.referralCount || 0, ri = ud.referralInvited || 0, rd = ud.referralDaysBonus || 0, bd = cfg.referralBonusDays || 3, rl = cfg.userBotLink ? cfg.userBotLink + '?start=ref_' + rc : '';
+                $('rC').innerHTML = `<div class="cd cd-glow" style="text-align:center;padding:18px"><div style="font-size:1.02rem;font-weight:700;margin-bottom:3px">${I.users} Реферальная программа</div>
+<div style="font-size:.8rem;color:var(--t2)">Приглашайте друзей — <strong style="color:var(--gn)">+${bd} дней</strong> за каждого!</div></div>
+<div class="ref-c" onclick="cp('${esc(rl || rc)}')"><div style="font-size:.68rem;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:600">${I.link} Ваша ссылка</div><div class="ref-v">${esc(rc)}</div><div style="font-size:.68rem;color:var(--t3);margin-top:4px">Нажмите чтобы скопировать</div></div>
+<div class="ref-sts"><div class="ref-st"><div class="ref-st-v gt">${rn}</div><div class="st-l">Всего</div></div><div class="ref-st"><div class="ref-st-v" style="color:var(--gn)">${ri}</div><div class="st-l">Активных</div></div>
+<div class="ref-st"><div class="ref-st-v" style="color:var(--am)">+${rd}</div><div class="st-l">Дней</div></div></div>
+${rl ? `<button class="btn btn-p" onclick="cp('${esc(rl)}')">${I.copy} Скопировать ссылку</button><button class="btn btn-o" onclick="shr()">${I.share} Поделиться</button>`
+                        : '<div class="cd" style="text-align:center;font-size:.8rem;color:var(--t2)">Ссылка появится после подписки</div>'}`
+            }
+            window.shr = () => { const l = cfg.userBotLink ? cfg.userBotLink + '?start=ref_' + (ud.referralCode || '') : ''; if (l && navigator.share) navigator.share({ title: cfg.shopName || 'HappVPN', text: 'Быстрый VPN!', url: l }).catch(() => { }); else if (l) cp(l) }
+
+            // SUPPORT
+            async function rP() {
+                try { if (uid) tickets = await api('/api/shop/my-tickets?userId=' + uid) } catch { tickets = [] }
+                let h = `<div class="sec">${I.send} Поддержка</div><button class="btn btn-p" onclick="nTkt()">${I.plus} Новое обращение</button>`;
+                if (cfg.supportUrl) h += `<a href="${esc(cfg.supportUrl)}" target="_blank" style="text-decoration:none"><button class="btn btn-o" style="margin-top:8px">${I.send} Написать в Telegram</button></a>`;
+                if (tickets.length > 0) {
+                    h += `<div class="sec" style="margin-top:14px">${I.clock} Обращения</div>`;
+                    h += tickets.map(t => `<div class="tkt" data-t="${t.id}"><div class="tkt-top"><div class="tkt-dot ${t.status === 'open' ? 'op' : 'cl'}"></div><div class="tkt-sub">${esc(t.subject)}</div><div class="tkt-dt">${new Date(t.createdAt).toLocaleDateString('ru-RU')}</div></div>
+<div class="tkt-pv">${esc((t.messages?.length ? t.messages[t.messages.length - 1].text : '').substring(0, 70))}</div></div>`).join('')
+                }
+                else h += `<div class="emp" style="margin-top:16px"><div class="emp-t">Нет обращений</div></div>`;
+                $('pC').innerHTML = h; document.querySelectorAll('.tkt[data-t]').forEach(e => e.addEventListener('click', () => oTC(e.dataset.t)))
+            }
+
+            window.nTkt = () => {
+                oM(`<div class="mo-t">${I.plus} Новое обращение</div><div class="ig"><div class="il">Тема</div><input class="inp" id="tS" placeholder="Проблема с подключением..."></div>
+<div class="ig"><div class="il">Сообщение</div><textarea class="inp" id="tM" rows="3" placeholder="Опишите проблему..."></textarea></div>
+<button class="btn btn-p" id="tB">${I.send} Отправить</button><button class="btn btn-o" onclick="cM()">Отмена</button>`);
+                $('tB').addEventListener('click', async () => {
+                    const s = $('tS').value.trim(), m = $('tM').value.trim(); if (!s || !m) { toast('Заполните поля'); return }
+                    try { await post('/api/shop/create-ticket', { userId: uid, subject: s, message: m, firstName: uname, username: tg?.initDataUnsafe?.user?.username || '' }); cM(); toast('✅ Отправлено'); rP() } catch { toast('❌ Ошибка') }
+                })
+            }
+
+            function oTC(id) {
+                const t = tickets.find(x => x.id === id); if (!t) return;
+                const ms = (t.messages || []).map(m => `<div class="mg ${m.from === 'user' ? 'mg-u' : 'mg-a'}"><div>${esc(m.text)}</div><div class="mg-t">${new Date(m.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div></div>`).join('');
+                oM(`<div class="mo-t">${esc(t.subject)}</div><div class="chat" id="cMs">${ms || '<div class="emp"><div class="emp-d">Нет сообщений</div></div>'}</div>
+${t.status === 'open' ? `<div class="mg-iw"><textarea class="mg-in" id="cIn" rows="1" placeholder="Сообщение..."></textarea><button class="mg-sb" id="cSb" data-t="${t.id}">${I.send}</button></div>`
+                        : '<div style="text-align:center;font-size:.8rem;color:var(--t3);padding:6px">Обращение закрыто</div>'}`);
+                const c = $('cMs'); if (c) c.scrollTop = c.scrollHeight;
+                const sb = $('cSb'); if (sb) sb.addEventListener('click', async () => {
+                    const i = $('cIn'), m = i.value.trim(); if (!m) return;
+                    try { await post('/api/shop/ticket-reply', { ticketId: id, userId: uid, message: m }); i.value = ''; try { tickets = await api('/api/shop/my-tickets?userId=' + uid) } catch { } oTC(id) } catch { toast('❌ Ошибка') }
+                })
+            }
+
+            load();
+            // DEVICE PURCHASE
+            window.oDV = function () {
+                const s = ud.activeSub; if (!s || !cfg.devicePrice) { toast('Недоступно'); return }
+                const cur = cfg.currency || '₽', bal = ud.balance || 0, pr = cfg.devicePrice, dv = (s.devices || []).length, mx = s.maxDevices || 0;
+                oM(`<div class="mo-t">${I.device} Докупить устройства</div>
+<div class="cd cd-glow" style="text-align:center;padding:18px">
+<div style="font-size:.72rem;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px">Текущий лимит</div>
+<div class="cd-v gt">${mx}</div>
+<div class="cd-h">Подключено: ${dv} / ${mx}</div></div>
+<div class="cd" style="text-align:center">
+<div style="font-size:.9rem;font-weight:700;margin-bottom:8px">Цена за устройство: <span class="gt">${pr} ${esc(cur)}</span></div>
+<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin:12px 0">
+<button class="btn btn-o" style="width:40px;height:40px;padding:0;border-radius:50%" id="dvM">−</button>
+<div style="font-size:1.5rem;font-weight:800;min-width:40px" id="dvQ">1</div>
+<button class="btn btn-o" style="width:40px;height:40px;padding:0;border-radius:50%" id="dvP">+</button>
+</div>
+<div style="font-size:.82rem;color:var(--t2)">Итого: <strong id="dvT" class="gt">${pr} ${esc(cur)}</strong></div>
+<div style="font-size:.72rem;color:var(--t3);margin-top:4px">Баланс: ${bal} ${esc(cur)}</div>
+</div>
+<button class="btn btn-g" id="dvB">${I.check} Купить</button>
+<button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                let qty = 1;
+                const qE = $('dvQ'), tE = $('dvT');
+                function upd() { qE.textContent = qty; tE.textContent = (qty * pr) + ' ' + (cfg.currency || '₽') }
+                $('dvM').onclick = function () { if (qty > 1) { qty--; upd() } };
+                $('dvP').onclick = function () { if (qty < 10) { qty++; upd() } };
+                $('dvB').onclick = async function () {
+                    const cost = qty * pr;
+                    if (bal < cost) { toast('❌ Недостаточно средств поплните баланс'); return }
+                    $('dvB').disabled = true; $('dvB').innerHTML = '⏳ Покупка...';
+                    try {
+                        const r = await post('/api/shop/buy-device', { userId: uid, subId: s.id, qty: qty });
+                        if (r.ok) { cM(); toast('✅ +' + qty + ' устройств!'); ud.balance = r.balance; setTimeout(() => load(), 500) }
+                        else { toast('❌ ' + (r.error || 'Ошибка')); $('dvB').disabled = false; $('dvB').innerHTML = I.check + ' Купить' }
+                    } catch { toast('❌ Ошибка'); $('dvB').disabled = false; $('dvB').innerHTML = I.check + ' Купить' }
+                }
+            };
+
+            // Auto-refresh data every 15s (silent, no page reset)
+            async function silentRefresh() {
+                try {
+                    const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uid ? api('/api/shop/user-data?userId=' + uid) : {}]);
+                    cfg = s; plans = p; ud = u;
+                    // Re-render current active page
+                    const active = document.querySelector('.pg.on');
+                    if (active) {
+                        const id = active.id.replace('pg-', '');
+                        ({ home: rH, sub: rS, bal: rB, ref: rR, help: rP })[id]?.();
+                    }
+                } catch { }
+            }
+            setInterval(silentRefresh, 15000);
+
+            // Refresh when user returns to the app
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) silentRefresh() });
+            if (tg && tg.onEvent) tg.onEvent('activated', silentRefresh);
+
+            if (tg) { tg.BackButton.show(); tg.BackButton.onClick(() => { $('mo').classList.contains('on') ? cM() : tg.close() }) }
+            window.go = go; window.cp = cp; window.cM = cM; window.showTU = showTU;
+        })();
+    </script>
+</body>
+
+</html>

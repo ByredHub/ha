@@ -1,0 +1,19 @@
+{
+    "name": "HappVPN Admin",
+    "short_name": "HappVPN",
+    "description": "VPN Admin Panel",
+    "start_url": ".",
+    "scope": ".",
+    "display": "standalone",
+    "background_color": "#0a0e1a",
+    "theme_color": "#6366f1",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}
