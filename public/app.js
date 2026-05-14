@@ -940,6 +940,7 @@
                 const t = templates.find(x => x.id === id);
                 return t ? t.name : '?';
             }).join(', ');
+            const planSources = [tplNames, p.useThreeDh ? '3DH автоматом' : ''].filter(Boolean).join(', ');
 
             return `<div class="sub-card ${statusClass}" style="animation-delay:${i * 0.04}s">
                 <div class="sub-card-top">
@@ -958,7 +959,7 @@
                     <span>📱 ${devs}</span>
                 </div>
                 ${p.description ? `<div class="sub-card-notes">${escapeHtml(p.description)}</div>` : ''}
-                ${tplNames ? `<div class="sub-card-notes" style="font-size:0.7rem;margin-top:4px">📦 ${escapeHtml(tplNames)}</div>` : ''}
+                ${planSources ? `<div class="sub-card-notes" style="font-size:0.7rem;margin-top:4px">📦 ${escapeHtml(planSources)}</div>` : ''}
             </div>`;
         }).join('');
 
@@ -983,24 +984,34 @@
         }));
     }
 
+    function renderPlanTemplateSelect(selectedIds = []) {
+        const regularTemplates = templates.filter(t => !t.threeDh);
+        if (regularTemplates.length === 0) {
+            $('#planTplSelectList').innerHTML = '<div class="empty-hint">Нет обычных шаблонов. Можно включить 3DH donor выше.</div>';
+            return;
+        }
+        $('#planTplSelectList').innerHTML = regularTemplates.map(t => `<label class="key-select-item"><input type="checkbox" value="${t.id}" ${selectedIds.includes(t.id) ? 'checked' : ''}><span class="select-name">${escapeHtml(t.name)} (${(t.uris || []).length})</span></label>`).join('');
+    }
+
     function openCreatePlan() {
-        if (templates.length === 0) { showToast('Сначала добавьте шаблоны', 'error'); return; }
-        $('#planTplSelectList').innerHTML = templates.map(t => `<label class="key-select-item"><input type="checkbox" value="${t.id}" checked><span class="select-name">${escapeHtml(t.name)} (${(t.uris || []).length})</span></label>`).join('');
+        renderPlanTemplateSelect([]);
         $('#planName').value = ''; $('#planPrice').value = ''; $('#planDuration').value = '30';
         $('#planTraffic').value = ''; $('#planMaxDevices').value = ''; $('#planDescription').value = '';
         $('#planPopular').checked = false;
+        if ($('#planUseThreeDh')) $('#planUseThreeDh').checked = false;
         $('#planEditId').value = ''; $('#modalPlanTitle').textContent = 'Добавить тариф'; $('#btnSavePlan').textContent = 'Создать';
         openModal('modalAddPlan');
     }
 
     function editPlan(id) {
         const p = plans.find(x => x.id === id); if (!p) return;
-        $('#planTplSelectList').innerHTML = templates.map(t => `<label class="key-select-item"><input type="checkbox" value="${t.id}" ${(p.templateIds || []).includes(t.id) ? 'checked' : ''}><span class="select-name">${escapeHtml(t.name)} (${(t.uris || []).length})</span></label>`).join('');
+        renderPlanTemplateSelect(p.templateIds || []);
         $('#planName').value = p.name || ''; $('#planPrice').value = p.price || '';
         $('#planDuration').value = p.duration || 30;
         $('#planTraffic').value = p.traffic || ''; $('#planMaxDevices').value = p.maxDevices || '';
         $('#planDescription').value = p.description || '';
         $('#planPopular').checked = !!p.popular;
+        if ($('#planUseThreeDh')) $('#planUseThreeDh').checked = !!p.useThreeDh;
         $('#planEditId').value = p.id; $('#modalPlanTitle').textContent = 'Редактировать тариф'; $('#btnSavePlan').textContent = 'Сохранить';
         openModal('modalAddPlan');
     }
@@ -1009,6 +1020,8 @@
         const name = $('#planName').value.trim(), editId = $('#planEditId').value;
         if (!name) { showToast('Введите название', 'error'); return; }
         const templateIds = Array.from($$('#planTplSelectList input:checked')).map(c => c.value);
+        const useThreeDh = $('#planUseThreeDh') ? $('#planUseThreeDh').checked : false;
+        if (!useThreeDh && templateIds.length === 0) { showToast('Выберите шаблон или включите 3DH donor', 'error'); return; }
         const body = {
             name,
             price: parseFloat($('#planPrice').value) || 0,
@@ -1016,6 +1029,7 @@
             traffic: parseFloat($('#planTraffic').value) || 0,
             maxDevices: parseInt($('#planMaxDevices').value) || 0,
             templateIds,
+            useThreeDh,
             description: $('#planDescription').value.trim(),
             popular: $('#planPopular').checked
         };

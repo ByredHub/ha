@@ -1317,6 +1317,7 @@ function mergeIds(...lists) {
 
 async function attachThreeDhTemplateForOrder(data, order, plan) {
     const settings = data.settings || {};
+    if (!plan || !plan.useThreeDh) return [];
     if (!isThreeDhConfigured(settings)) return [];
     if (order.threeDhTemplateId) return [order.threeDhTemplateId];
 
@@ -1329,7 +1330,7 @@ async function attachThreeDhTemplateForOrder(data, order, plan) {
         donorUrl: '',
         uris: device.configs,
         uriDirect: device.configs.map(() => true),
-        uriNames: device.configs.map((_, i) => device.configs.length > 1 ? `${device.name}-${i + 1}` : device.name),
+        uriNames: [],
         enabled: true,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -1737,7 +1738,7 @@ app.get('/sub', async (req, res) => {
         let relayIdx = 0;
         for (const tpl of selectedTemplates) {
             const directs = tpl.uriDirect || [];
-            const customNames = tpl.uriNames || [];
+            const customNames = tpl.threeDh ? [] : (tpl.uriNames || []);
             for (let ui = 0; ui < (tpl.uris || []).length; ui++) {
                 const uri = tpl.uris[ui];
                 // Determine display name
@@ -1776,7 +1777,7 @@ app.get('/sub', async (req, res) => {
     } else {
         // Original mode: give raw URIs
         for (const tpl of selectedTemplates) {
-            const customNames = tpl.uriNames || [];
+            const customNames = tpl.threeDh ? [] : (tpl.uriNames || []);
             for (let ui = 0; ui < (tpl.uris || []).length; ui++) {
                 let finalUri = tpl.uris[ui];
                 if (finalUri.includes('{uuid}')) {
@@ -2413,9 +2414,10 @@ app.get('/api/plans', authMiddleware, (req, res) => {
 
 app.post('/api/plans', authMiddleware, (req, res) => {
     const data = loadData();
-    const { name, price, duration, traffic, maxDevices, templateIds, description, popular } = req.body;
+    const { name, price, duration, traffic, maxDevices, templateIds, useThreeDh, description, popular } = req.body;
     if (!name) return res.status(400).json({ error: 'Missing name' });
     if (!price && price !== 0) return res.status(400).json({ error: 'Missing price' });
+    if (!useThreeDh && (!templateIds || templateIds.length === 0)) return res.status(400).json({ error: 'Select templates or enable 3DH donor' });
 
     const plan = {
         id: generateId(),
@@ -2425,6 +2427,7 @@ app.post('/api/plans', authMiddleware, (req, res) => {
         traffic: parseFloat(traffic) || 0,
         maxDevices: parseInt(maxDevices) || 0,
         templateIds: templateIds || [],
+        useThreeDh: !!useThreeDh,
         description: description || '',
         popular: !!popular,
         enabled: true,
@@ -2442,13 +2445,17 @@ app.put('/api/plans/:id', authMiddleware, (req, res) => {
     const idx = (data.plans || []).findIndex(p => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Not found' });
 
-    const { name, price, duration, traffic, maxDevices, templateIds, description, popular, enabled } = req.body;
+    const { name, price, duration, traffic, maxDevices, templateIds, useThreeDh, description, popular, enabled } = req.body;
+    const nextTemplateIds = templateIds !== undefined ? templateIds : (data.plans[idx].templateIds || []);
+    const nextUseThreeDh = useThreeDh !== undefined ? !!useThreeDh : !!data.plans[idx].useThreeDh;
+    if (!nextUseThreeDh && nextTemplateIds.length === 0) return res.status(400).json({ error: 'Select templates or enable 3DH donor' });
     if (name !== undefined) data.plans[idx].name = name;
     if (price !== undefined) data.plans[idx].price = parseFloat(price) || 0;
     if (duration !== undefined) data.plans[idx].duration = parseInt(duration) || 30;
     if (traffic !== undefined) data.plans[idx].traffic = parseFloat(traffic) || 0;
     if (maxDevices !== undefined) data.plans[idx].maxDevices = parseInt(maxDevices) || 0;
     if (templateIds !== undefined) data.plans[idx].templateIds = templateIds;
+    if (useThreeDh !== undefined) data.plans[idx].useThreeDh = !!useThreeDh;
     if (description !== undefined) data.plans[idx].description = description;
     if (popular !== undefined) data.plans[idx].popular = popular;
     if (enabled !== undefined) data.plans[idx].enabled = enabled;
