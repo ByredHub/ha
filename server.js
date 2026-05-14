@@ -1548,7 +1548,7 @@ app.get('/c', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'client.html'));
 });
 
-app.get('/api/client-sub', (req, res) => {
+app.get('/api/client-sub', async (req, res) => {
     const token = req.query.token;
     if (!token) return res.status(400).json({ error: 'No token' });
     const data = loadData();
@@ -1564,16 +1564,28 @@ app.get('/api/client-sub', (req, res) => {
         .filter(t => t && t.enabled !== false);
 
     const servers = [];
+    const s = data.settings || {};
+    let serverIndex = 0;
     for (const t of tpls) {
-        for (const uri of (t.uris || [])) {
-            let name = 'Сервер';
-            const h = uri.lastIndexOf('#');
-            if (h !== -1) try { name = decodeURIComponent(uri.substring(h + 1)); } catch { }
+        const customNames = t.threeDh ? [] : (t.uriNames || []);
+        for (let ui = 0; ui < (t.uris || []).length; ui++) {
+            const uri = t.uris[ui];
+            const parsed = parseVlessUri(uri);
+            const serverName = customNames[ui] || getVlessUriName(uri, `${t.name} ${ui + 1}`);
+            const name = await buildVlessDisplayName(s, {
+                server: serverName,
+                template: t.name,
+                index: serverIndex + 1,
+                mode: (t.uriDirect || [])[ui] ? 'direct' : 'relay',
+                host: parsed?.address || '',
+                port: parsed?.port || '',
+                sub: sub.name || ''
+            });
             servers.push({ name, template: t.name });
+            serverIndex++;
         }
     }
 
-    const s = data.settings || {};
     const subUrl = `${getServerUrl(data)}/sub?token=${sub.token}`;
 
     res.json({
