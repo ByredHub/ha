@@ -1178,10 +1178,15 @@ function extractThreeDhConfig(html, deviceName) {
     for (const row of rows) {
         if (!row.includes(deviceName)) continue;
         const input = row.match(/<input[^>]+(?:class=["'][^"']*vpnString[^"']*["'][^>]*|[^>]*class=["'][^"']*vpnString[^"']*["'])[^>]*>/i);
-        if (!input) continue;
-        const value = input[0].match(/\svalue=["']([^"']+)["']/i);
-        const id = input[0].match(/\sdata-id=["']([^"']+)["']/i);
-        if (value) return { config: decodeHtmlAttr(value[1]), deviceId: id ? decodeHtmlAttr(id[1]) : '' };
+        const href = row.match(/\shref=["']([^"']*\/vpn\/[^"']+)["']/i);
+        if (!input && !href) continue;
+        const value = input ? input[0].match(/\svalue=["']([^"']+)["']/i) : null;
+        const id = input ? input[0].match(/\sdata-id=["']([^"']+)["']/i) : null;
+        return {
+            config: value ? decodeHtmlAttr(value[1]) : '',
+            deviceId: id ? decodeHtmlAttr(id[1]) : '',
+            url: href ? makeThreeDhUrl(decodeHtmlAttr(href[1])) : ''
+        };
     }
 
     const inputs = [...String(html).matchAll(/<input[^>]+(?:class=["'][^"']*vpnString[^"']*["'][^>]*|[^>]*class=["'][^"']*vpnString[^"']*["'])[^>]*>/gi)];
@@ -1189,7 +1194,74 @@ function extractThreeDhConfig(html, deviceName) {
     const last = inputs[inputs.length - 1][0];
     const value = last.match(/\svalue=["']([^"']+)["']/i);
     const id = last.match(/\sdata-id=["']([^"']+)["']/i);
-    return value ? { config: decodeHtmlAttr(value[1]), deviceId: id ? decodeHtmlAttr(id[1]) : '' } : null;
+    const rowStart = String(html).lastIndexOf('<tr', inputs[inputs.length - 1].index);
+    const rowEnd = String(html).indexOf('</tr>', inputs[inputs.length - 1].index);
+    const row = rowStart >= 0 && rowEnd > rowStart ? String(html).slice(rowStart, rowEnd) : '';
+    const href = row.match(/\shref=["']([^"']*\/vpn\/[^"']+)["']/i);
+    return value ? {
+        config: decodeHtmlAttr(value[1]),
+        deviceId: id ? decodeHtmlAttr(id[1]) : '',
+        url: href ? makeThreeDhUrl(decodeHtmlAttr(href[1])) : ''
+    } : null;
+}
+
+function makeThreeDhUrl(value) {
+    if (!value) return '';
+    try {
+        return new URL(value, 'https://ru.3dh.live').href;
+    } catch {
+        return '';
+    }
+}
+
+function maybeDecodeBase64Subscription(raw) {
+    const text = String(raw || '').trim();
+    if (!text || /^(vless|trojan|ss|vmess):\/\//i.test(text)) return text;
+    const compact = text.replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9+/=_-]{40,}$/.test(compact)) return text;
+    const normalized = compact.replace(/-/g, '+').replace(/_/g, '/');
+    try {
+        const decoded = Buffer.from(normalized, 'base64').toString('utf8');
+        return /vless:\/\//i.test(decoded) ? decoded : text;
+    } catch {
+        return text;
+    }
+}
+
+function extractVlessUris(content) {
+    const decoded = maybeDecodeBase64Subscription(decodeHtmlAttr(content || ''));
+    return [...new Set((decoded.match(/vless:\/\/[^\s"'<>]+/gi) || []).map(u => u.trim()))];
+}
+
+async function resolveThreeDhVlessUris(extracted, jar) {
+    const direct = extractVlessUris(extracted.config);
+    if (direct.length) return { uris: direct, sourceUrl: extracted.url || '' };
+
+    const urls = [];
+    const rawConfig = String(extracted.config || '').trim();
+    if (/^https?:\/\//i.test(rawConfig) || rawConfig.startsWith('/vpn/')) urls.push(makeThreeDhUrl(rawConfig));
+    if (extracted.url) urls.push(extracted.url);
+
+    for (const url of [...new Set(urls.filter(Boolean))]) {
+        const variants = [url];
+        try {
+            const parsed = new URL(url);
+            if (parsed.hostname === '3dh.pro') variants.push(`https://ru.3dh.live${parsed.pathname}${parsed.search}`);
+        } catch { }
+
+        for (const variant of [...new Set(variants)]) {
+            try {
+                const resp = await threeDhRequest('GET', variant, null, jar, { Accept: 'text/plain,*/*;q=0.8' });
+                const uris = extractVlessUris(resp.body);
+                if (uris.length) return { uris, sourceUrl: variant };
+            } catch (e) {
+                console.log('3DH subscription fetch warning:', e.message);
+            }
+        }
+    }
+
+    const preview = String(extracted.config || extracted.url || '').replace(/\s+/g, ' ').slice(0, 120);
+    throw new Error(`3DH device created, but VLESS subscription was not found${preview ? `: ${preview}` : ''}`);
 }
 
 async function createThreeDhDevice(settings, order, plan) {
@@ -1225,10 +1297,8 @@ async function createThreeDhDevice(settings, order, plan) {
     await new Promise(resolve => setTimeout(resolve, 3000));
     const listResp = await threeDhRequest('GET', '/vpn/', null, jar);
     const extracted = extractThreeDhConfig(listResp.body, name);
-    if (!extracted || !extracted.config) throw new Error('3DH device created, but config was not found');
-    if (!String(extracted.config).trim().startsWith('vless://')) {
-        throw new Error('3DH returned non-VLESS config; select a VLESS 3DH protocol/server');
-    }
+    if (!extracted || (!extracted.config && !extracted.url)) throw new Error('3DH device created, but config was not found');
+    const resolved = await resolveThreeDhVlessUris(extracted, jar);
 
     return {
         name,
@@ -1236,7 +1306,8 @@ async function createThreeDhDevice(settings, order, plan) {
         serverName: server.location_name_ru || server.location_name || server.name || '',
         protocol: server.type || server.proto || '',
         deviceId: extracted.deviceId,
-        config: extracted.config.trim()
+        sourceUrl: resolved.sourceUrl || extracted.url || '',
+        configs: resolved.uris
     };
 }
 
@@ -1256,9 +1327,9 @@ async function attachThreeDhTemplateForOrder(data, order, plan) {
         id: generateId(),
         name: `3DH ${order.userId} ${device.serverName || device.serverId || ''}`.trim(),
         donorUrl: '',
-        uris: [device.config],
-        uriDirect: [true],
-        uriNames: [device.name],
+        uris: device.configs,
+        uriDirect: device.configs.map(() => true),
+        uriNames: device.configs.map((_, i) => device.configs.length > 1 ? `${device.name}-${i + 1}` : device.name),
         enabled: true,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -1268,6 +1339,7 @@ async function attachThreeDhTemplateForOrder(data, order, plan) {
             serverId: device.serverId,
             serverName: device.serverName,
             protocol: device.protocol,
+            sourceUrl: device.sourceUrl || '',
             orderId: order.id || ''
         }
     };
