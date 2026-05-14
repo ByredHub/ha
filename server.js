@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const dns = require('dns').promises;
 const { exec } = require('child_process');
 const os = require('os');
 
@@ -249,13 +250,52 @@ function formatVlessName(settings = {}, context = {}) {
         host: context.host || '',
         port: context.port || '',
         domain: context.domain || settings.relayDomain || '',
-        sub: context.sub || ''
+        sub: context.sub || '',
+        country: context.country || '',
+        flag: context.flag || ''
     };
     const result = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
         const value = values[key] !== undefined ? values[key] : '';
         return String(value);
     }).replace(/\s+/g, ' ').trim();
     return (result || values.server || 'Server').slice(0, 120);
+}
+
+function countryCodeToFlag(code = '') {
+    const cc = String(code).trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(cc)) return '';
+    return [...cc].map(ch => String.fromCodePoint(0x1F1E6 + ch.charCodeAt(0) - 65)).join('');
+}
+
+async function lookupServerGeo(host) {
+    if (!host) return null;
+    let ip = String(host).trim();
+    try {
+        if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+            const resolved = await dns.lookup(ip, { family: 4 });
+            ip = resolved.address;
+        }
+        const geo = await lookupGeo(ip);
+        if (!geo) return null;
+        return {
+            ...geo,
+            ip,
+            flag: countryCodeToFlag(geo.countryCode)
+        };
+    } catch {
+        return null;
+    }
+}
+
+async function buildVlessDisplayName(settings, context) {
+    const template = String(settings.vlessNameTemplate || '{server}');
+    if (!/\{(?:country|flag)\}/i.test(template)) return formatVlessName(settings, context);
+    const geo = await lookupServerGeo(context.host || context.server || context.domain);
+    return formatVlessName(settings, {
+        ...context,
+        country: geo?.country || '',
+        flag: geo?.flag || ''
+    });
 }
 
 function buildStream(p) {
@@ -1162,7 +1202,7 @@ function sendStub(res, stubKey) {
 }
 
 // ===== /sub ENDPOINT =====
-app.get('/sub', (req, res) => {
+app.get('/sub', async (req, res) => {
     const token = req.query.token;
     if (!token) return sendStub(res, 'stubNoToken');
 
@@ -1275,7 +1315,7 @@ app.get('/sub', (req, res) => {
 
         // Direct VPN through relay (with Reality — invisible to DPI)
         const mainFp = getFingerprint(sub.token + ':main');
-        const mainName = formatVlessName(settings, {
+        const mainName = await buildVlessDisplayName(settings, {
             server: settings.relayDomain,
             template: settings.title || 'HappVPN',
             index: 1,
@@ -1301,7 +1341,7 @@ app.get('/sub', (req, res) => {
                     serverName = getVlessUriName(uri, serverName);
                 }
                 const parsed = parseVlessUri(uri);
-                const name = formatVlessName(settings, {
+                const name = await buildVlessDisplayName(settings, {
                     server: serverName,
                     template: tpl.name,
                     index: relayIdx + 1,
@@ -1337,7 +1377,7 @@ app.get('/sub', (req, res) => {
                 }
                 const parsed = parseVlessUri(finalUri);
                 const serverName = customNames[ui] || getVlessUriName(finalUri, `${tpl.name} ${ui + 1}`);
-                const name = formatVlessName(settings, {
+                const name = await buildVlessDisplayName(settings, {
                     server: serverName,
                     template: tpl.name,
                     index: ui + 1,
@@ -3156,14 +3196,14 @@ function lookupGeo(ip) {
             return resolve(geoCache[ip].data);
         }
         const http = require('http');
-        http.get(`http://ip-api.com/json/${ip}?fields=status,country,city,isp,org,regionName`, { timeout: 2000 }, resp => {
+        http.get(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,city,isp,org,regionName`, { timeout: 2000 }, resp => {
             let d = '';
             resp.on('data', c => d += c);
             resp.on('end', () => {
                 try {
                     const j = JSON.parse(d);
                     if (j.status === 'success') {
-                        const data = { country: j.country, city: j.city, region: j.regionName, isp: j.isp, org: j.org };
+                        const data = { country: j.country, countryCode: j.countryCode, city: j.city, region: j.regionName, isp: j.isp, org: j.org };
                         geoCache[ip] = { ts: Date.now(), data };
                         resolve(data);
                     } else resolve(null);
