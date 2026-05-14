@@ -1087,13 +1087,37 @@ function pickThreeDhServer(settings, servers) {
         return found;
     }
 
-    const wantedProto = String(settings.threeDhProtocol || 'vless').trim().toLowerCase();
+    const wantedProto = String(settings.threeDhProtocol || '').trim().toLowerCase();
     const filtered = wantedProto
-        ? servers.filter(s => String(s.type || s.proto || '').toLowerCase() === wantedProto)
+        ? servers.filter(s => threeDhServerMatchesProtocol(s, wantedProto))
         : servers.slice();
-    if (!filtered.length) throw new Error(`3DH has no servers for protocol ${wantedProto || 'any'}`);
+    if (!filtered.length) {
+        const available = [...new Set(servers.map(s => [s.type, s.proto, s.protocol, s.name].filter(Boolean).join('/')).filter(Boolean))].slice(0, 12).join(', ');
+        if (wantedProto === 'vless' && servers.length) {
+            console.log(`3DH warning: no exact VLESS metadata, trying any server. Available: ${available || 'unknown'}`);
+            return servers.slice().sort((a, b) => Number(a.client_count || 0) - Number(b.client_count || 0))[0];
+        }
+        throw new Error(`3DH has no servers for protocol ${wantedProto || 'any'}${available ? `. Available: ${available}` : ''}`);
+    }
 
     return filtered.sort((a, b) => Number(a.client_count || 0) - Number(b.client_count || 0))[0];
+}
+
+function threeDhServerMatchesProtocol(server, wantedProto) {
+    if (!wantedProto || wantedProto === 'auto' || wantedProto === 'any') return true;
+    const fields = [
+        server.type,
+        server.proto,
+        server.protocol,
+        server.protocol_name,
+        server.name,
+        server.title,
+        server.location_name,
+        server.location_name_ru
+    ].map(v => String(v || '').toLowerCase()).filter(Boolean);
+    if (fields.some(v => v === wantedProto || v.includes(wantedProto))) return true;
+    if (wantedProto === 'vless') return fields.some(v => /xray|reality|xtls|vision/.test(v));
+    return false;
 }
 
 function formatThreeDhDeviceName(template, order, plan, server) {

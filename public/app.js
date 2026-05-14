@@ -896,7 +896,7 @@
             threeDhEnabled: $('#settingThreeDhEnabled') ? $('#settingThreeDhEnabled').checked : false,
             threeDhMode: $('#settingThreeDhMode') ? parseInt($('#settingThreeDhMode').value) || 7 : 7,
             threeDhDeviceType: $('#settingThreeDhDeviceType') ? parseInt($('#settingThreeDhDeviceType').value) || 2 : 2,
-            threeDhProtocol: $('#settingThreeDhProtocol') ? $('#settingThreeDhProtocol').value.trim() || 'vless' : 'vless',
+            threeDhProtocol: $('#settingThreeDhProtocol') ? $('#settingThreeDhProtocol').value.trim() : '',
             threeDhLocationId: $('#settingThreeDhLocationId') ? $('#settingThreeDhLocationId').value.trim() : '',
             threeDhNameTemplate: $('#settingThreeDhNameTemplate') ? $('#settingThreeDhNameTemplate').value.trim() || 'HappVPN-{userId}-{order}' : 'HappVPN-{userId}-{order}',
             userBotWelcome: $('#settingUserBotWelcome') ? $('#settingUserBotWelcome').value.trim() : '',
