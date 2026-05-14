@@ -990,6 +990,43 @@ function extractHiddenInput(html, name) {
     return value ? decodeHtmlAttr(value[1]) : '';
 }
 
+function stripHtml(html = '') {
+    return decodeHtmlAttr(String(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function extractSelectOptions(html, fieldName) {
+    const selectRe = new RegExp(`<select[^>]+(?:name|id)=["']${fieldName}["'][^>]*>([\\s\\S]*?)<\\/select>`, 'i');
+    const select = String(html).match(selectRe);
+    if (!select) return [];
+    return [...select[1].matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)]
+        .map(match => {
+            const value = match[1].match(/\svalue=["']?([^"'\s>]*)/i);
+            return {
+                value: value ? decodeHtmlAttr(value[1]) : stripHtml(match[2]),
+                label: stripHtml(match[2])
+            };
+        })
+        .filter(o => o.value);
+}
+
+function resolveThreeDhDeviceType(settings, createHtml) {
+    const options = extractSelectOptions(createHtml, 'type');
+    const configured = String(settings.threeDhDeviceType || '').trim();
+    if (configured && options.some(o => String(o.value) === configured)) return configured;
+
+    const ios = options.find(o => /ios|iphone|ipad|apple|айфон|айос/i.test(`${o.label} ${o.value}`));
+    if (ios) {
+        if (configured && configured !== String(ios.value)) {
+            console.log(`3DH warning: configured device type ${configured} is unavailable, using ${ios.value} (${ios.label})`);
+        }
+        return ios.value;
+    }
+
+    if (configured && !options.length) return configured;
+    const available = options.map(o => `${o.value}:${o.label}`).join(', ');
+    throw new Error(`3DH iOS device type not found${available ? `. Available types: ${available}` : ''}`);
+}
+
 function buildMultipart(fields) {
     const boundary = '----HappVPN3DH' + crypto.randomBytes(12).toString('hex');
     const chunks = [];
@@ -1162,9 +1199,9 @@ async function createThreeDhDevice(settings, order, plan) {
     const servers = await threeDhGetServers(settings, jar);
     const server = pickThreeDhServer(settings, servers);
     const name = formatThreeDhDeviceName(settings.threeDhNameTemplate, order, plan, server);
-    const deviceType = parseInt(settings.threeDhDeviceType) || 2;
     const createPage = await threeDhRequest('GET', '/vpn/create', null, jar);
     const csrfToken = extractHiddenInput(createPage.body, 'csrf_token');
+    const deviceType = resolveThreeDhDeviceType(settings, createPage.body);
     const fields = { name, type: deviceType, location: server.id, mode: parseInt(settings.threeDhMode) || 7 };
     if (csrfToken) fields.csrf_token = csrfToken;
     const multipart = buildMultipart(fields);
