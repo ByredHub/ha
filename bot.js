@@ -739,45 +739,18 @@ function setupBotHandlers(botInstance) {
             const data = loadData();
             const order = (data.orders || []).find(o => o.id === orderId);
             if (!order) return botInstance.answerCallbackQuery(query.id, { text: '❌ Не найден' });
+            if (order.paymentProvider === 'yookassa') return botInstance.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
             if (order.status === 'completed') return botInstance.answerCallbackQuery(query.id, { text: '✅ Уже выполнен' });
             const plan = (data.plans || []).find(p => p.id === order.planId);
             if (!plan) return botInstance.answerCallbackQuery(query.id, { text: '❌ Тариф не найден' });
 
-            if (!data.subscriptions) data.subscriptions = [];
-            const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(order.userId) && s.enabled !== false);
-
-            let sub, action;
-            if (existing && plan.duration > 0) {
-                const base = (existing.expiresAt && existing.expiresAt > Date.now()) ? existing.expiresAt : Date.now();
-                existing.expiresAt = base + (plan.duration * 86400000);
-                if (plan.traffic > 0) existing.trafficTotal = (existing.trafficTotal || 0) + plan.traffic;
-                existing.notes = (existing.notes || '') + ` | +${plan.duration}д (${order.planName})`;
-                sub = existing;
-                action = 'extended';
-            } else {
-                sub = {
-                    id: generateId(), name: `${plan.name} — ${order.firstName || 'User'}`,
-                    trafficTotal: plan.traffic || 0, trafficUsed: 0, maxDevices: plan.maxDevices || 0,
-                    token: generateToken(), templateIds: plan.templateIds || [], enabled: true,
-                    expiresAt: plan.duration > 0 ? Date.now() + (plan.duration * 86400000) : 0,
-                    notes: `Заказ #${order.id.substring(0, 8)} | @${order.username || 'n/a'} | ${order.planName}`,
-                    devices: [], telegramUsers: [order.userId], createdAt: Date.now(), accessCount: 0, orderId: order.id
-                };
-                data.subscriptions.push(sub);
-                action = 'created';
-            }
-            order.status = 'completed'; order.completedAt = Date.now(); order.subscriptionId = sub.id;
+            const activated = global.activateOrder
+                ? global.activateOrder(data, order, { source: 'Ручное подтверждение' })
+                : null;
+            if (!activated) return botInstance.answerCallbackQuery(query.id, { text: '❌ Сервер не готов' });
             saveData(data);
             botInstance.editMessageText(`✅ Заказ одобрен!\n📦 ${plan.name}\n👤 ${order.firstName || 'User'} @${order.username || ''}`, { chat_id: chatId, message_id: msgId });
-            const url = getSubUrl(sub.token);
-            if (global.happUserBot) {
-                const msg = action === 'extended'
-                    ? `✅ Подписка продлена!\n\n📦 ${plan.name}\n📅 До: ${new Date(sub.expiresAt).toLocaleDateString('ru-RU')}\n🔗 ${url}`
-                    : `🎉 Подписка активирована!\n\n📦 ${plan.name}\n🔗 ${url}\n\nСкопируйте и добавьте в Happ VPN.`;
-                global.happUserBot.sendMessage(order.chatId, msg).catch(() => { });
-            }
-            if (global.scheduleRelaySync) global.scheduleRelaySync();
-            return botInstance.answerCallbackQuery(query.id, { text: action === 'extended' ? '✅ Продлена!' : '✅ Создана!' });
+            return botInstance.answerCallbackQuery(query.id, { text: activated.action === 'extended' ? '✅ Продлена!' : '✅ Создана!' });
         }
 
         if (cb.startsWith('reject_order:')) {
@@ -786,6 +759,7 @@ function setupBotHandlers(botInstance) {
             const data = loadData();
             const order = (data.orders || []).find(o => o.id === orderId);
             if (!order) return botInstance.answerCallbackQuery(query.id, { text: '❌ Не найден' });
+            if (order.paymentProvider === 'yookassa') return botInstance.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
             order.status = 'rejected'; order.rejectedAt = Date.now(); saveData(data);
             botInstance.editMessageText(`❌ Отклонён: ${order.planName} | ${order.firstName || ''} @${order.username || ''}`, { chat_id: chatId, message_id: msgId });
             if (global.happUserBot) {

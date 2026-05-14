@@ -1240,23 +1240,59 @@ ${(cfg.devicePrice > 0 && s.maxDevices > 0) ? `<div class="sec" style="margin-to
             // PLAN MODAL
             function oPM(p) {
                 const cur = cfg.currency || '₽', bal = ud.balance || 0, canBuy = bal >= p.price;
+                const balanceBlock = canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wallet} Баланс</div><div style="font-size:.9rem;font-weight:700;color:var(--gn)">Достаточно: ${bal} ${esc(cur)}</div></div>
+<button class="btn btn-g" id="bBuy" data-id="${p.id}">${I.check} Купить с баланса</button>` : '';
+                const yookassaBlock = cfg.yookassaEnabled ? `<div class="cd"><div class="cd-t">${I.wallet} YooKassa</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">${esc(cfg.yookassaDescription || 'Оплата картой или СБП через YooKassa')}</div></div>
+<button class="btn btn-p" id="bYK" data-id="${p.id}">${I.wallet} Оплатить картой / СБП</button>` : '';
+                const manualBlock = (!canBuy && !cfg.yookassaEnabled) ? `<div class="sec">${I.wallet} Выберите оплату</div>${payHtml()}
+<p style="font-size:.72rem;color:var(--t3);text-align:center;margin:8px 0">После оплаты отправьте скриншот боту</p>
+<button class="btn btn-p" id="bPay" data-id="${p.id}">${I.send} Я оплатил</button>` : '';
                 oM(`<div class="mo-t">${esc(p.name)}</div>
 <div class="cd cd-glow" style="text-align:center;padding:18px"><div class="cd-v gt">${p.price} ${esc(cur)}</div><div class="cd-h">${fD(p.duration)} · ${fT(p.traffic)} · ${p.maxDevices > 0 ? p.maxDevices : '∞'} устр.</div></div>
 ${p.description ? `<div class="cd"><div style="font-size:.84rem;color:var(--t2)">${esc(p.description)}</div></div>` : ''}
 <div class="cd"><div class="cd-t">${I.check} Что входит</div><div style="font-size:.84rem;color:var(--t2);line-height:1.8">${I.zap} Высокая скорость<br>${I.shield} Без логов<br>${I.link} Обход блокировок</div></div>
-${canBuy ? `<div class="cd" style="text-align:center"><div class="cd-t">${I.wallet} Баланс</div><div style="font-size:.9rem;font-weight:700;color:var(--gn)">Достаточно: ${bal} ${esc(cur)}</div></div>
-<button class="btn btn-g" id="bBuy" data-id="${p.id}">${I.check} Купить с баланса</button>`
-                        : `<div class="sec">${I.wallet} Выберите оплату</div>${payHtml()}
-<p style="font-size:.72rem;color:var(--t3);text-align:center;margin:8px 0">После оплаты отправьте скриншот боту</p>
-<button class="btn btn-p" id="bPay" data-id="${p.id}">${I.send} Я оплатил</button>`}
+${balanceBlock}${yookassaBlock}${manualBlock}
 <button class="btn btn-o" onclick="cM()">Закрыть</button>`);
                 const bb = $('bBuy'); if (bb) bb.addEventListener('click', () => buyBal(p));
+                const byk = $('bYK'); if (byk) byk.addEventListener('click', () => payYooKassa(p));
                 const bp = $('bPay'); if (bp) bp.addEventListener('click', () => mkOrd(p, selectedPay()))
             }
 
             async function buyBal(p) {
                 const b = $('bBuy'); b.disabled = true; b.innerHTML = '⏳ Покупка...';
                 try { const r = await post('/api/shop/buy-with-balance', { planId: p.id, userId: uid }); if (r.ok) { cM(); toast('✅ Подписка активирована!'); ud.balance = r.balance; setTimeout(() => load(), 500) } } catch { toast('❌ Ошибка'); b.disabled = false; b.innerHTML = I.check + ' Купить с баланса' }
+            }
+
+            async function payYooKassa(p) {
+                const b = $('bYK'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
+                try {
+                    const r = await post('/api/shop/yookassa/create-payment', { planId: p.id, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname });
+                    if (!r.ok || !r.confirmationUrl) throw new Error(r.error || 'Ошибка платежа');
+                    oM(`<div class="mo-t">${I.wallet} Оплата YooKassa</div>
+<div class="cd"><div class="cd-t">${I.check} Платеж создан</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">Откройте страницу оплаты, оплатите заказ, затем вернитесь и нажмите проверку.</div></div>
+<button class="btn btn-p" id="ykOpen">${I.wallet} Открыть оплату</button>
+<button class="btn btn-g" id="ykCheck">${I.check} Проверить оплату</button>
+<button class="btn btn-o" onclick="cM()">Закрыть</button>`);
+                    $('ykOpen').addEventListener('click', () => {
+                        if (tg && tg.openLink) tg.openLink(r.confirmationUrl);
+                        else window.open(r.confirmationUrl, '_blank');
+                    });
+                    $('ykCheck').addEventListener('click', () => checkYooKassa(r.orderId));
+                    setTimeout(() => $('ykOpen')?.click(), 300);
+                } catch (e) {
+                    toast('❌ ' + (e.message || 'Ошибка'));
+                    b.disabled = false; b.innerHTML = I.wallet + ' Оплатить картой / СБП';
+                }
+            }
+
+            async function checkYooKassa(orderId) {
+                const b = $('ykCheck'); if (b) { b.disabled = true; b.innerHTML = '⏳ Проверяем...'; }
+                try {
+                    const r = await post('/api/shop/yookassa/check-payment', { orderId, userId: uid });
+                    if (r.status === 'completed') { cM(); toast('✅ Оплата прошла, подписка активирована!'); setTimeout(() => load(), 500); return }
+                    toast(r.yookassaStatus === 'pending' ? '⏳ Платеж еще обрабатывается' : 'Оплата пока не подтверждена');
+                } catch (e) { toast('❌ Ошибка проверки'); }
+                if (b) { b.disabled = false; b.innerHTML = I.check + ' Проверить оплату'; }
             }
 
             async function mkOrd(p, paymentMethod) {

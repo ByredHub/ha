@@ -408,7 +408,7 @@ function setupUserBotHandlers(bot) {
         const userId = msg.from.id;
         const data = loadData();
         const pendingOrder = (data.orders || []).reverse().find(o =>
-            o.userId === userId && (o.status === 'awaiting_payment' || o.status === 'pending_review')
+            o.userId === userId && o.paymentProvider !== 'yookassa' && (o.status === 'awaiting_payment' || o.status === 'pending_review')
         );
 
         if (!pendingOrder) return;
@@ -589,34 +589,16 @@ async function approveOrder(bot, chatId, msgId, orderId, query) {
     const data = loadData();
     const order = (data.orders || []).find(o => o.id === orderId);
     if (!order) return bot.answerCallbackQuery(query.id, { text: '❌ Не найден' });
+    if (order.paymentProvider === 'yookassa') return bot.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
     if (order.status === 'completed') return bot.answerCallbackQuery(query.id, { text: '✅ Уже выполнен' });
 
     const plan = (data.plans || []).find(p => p.id === order.planId);
     if (!plan) return bot.answerCallbackQuery(query.id, { text: '❌ Тариф не найден' });
 
-    const sub = {
-        id: generateId(),
-        name: `${plan.name} — ${order.firstName || 'User'}`,
-        trafficTotal: plan.traffic || 0,
-        trafficUsed: 0,
-        maxDevices: plan.maxDevices || 0,
-        token: generateToken(),
-        templateIds: plan.templateIds || [],
-        enabled: true,
-        expiresAt: plan.duration > 0 ? Date.now() + (plan.duration * 86400000) : 0,
-        notes: `Заказ #${order.id.substring(0, 8)} | @${order.username || 'n/a'} | ${order.planName}`,
-        devices: [],
-        telegramUsers: [order.userId],
-        createdAt: Date.now(),
-        accessCount: 0,
-        orderId: order.id
-    };
-
-    if (!data.subscriptions) data.subscriptions = [];
-    data.subscriptions.push(sub);
-    order.status = 'completed';
-    order.completedAt = Date.now();
-    order.subscriptionId = sub.id;
+    const activated = global.activateOrder
+        ? global.activateOrder(data, order, { source: 'Ручное подтверждение' })
+        : null;
+    if (!activated) return bot.answerCallbackQuery(query.id, { text: '❌ Сервер не готов' });
     saveData(data);
 
     bot.editMessageText(
@@ -625,20 +607,21 @@ async function approveOrder(bot, chatId, msgId, orderId, query) {
     );
 
     // Notify user
-    const url = getSubUrl(sub.token);
-    const cfg = getSettings();
+    const sub = activated.sub;
+    const url = activated.subUrl || getSubUrl(sub.token);
 
-    bot.sendMessage(order.chatId,
-        `🎉 *Подписка активирована\\!*\n\n` +
-        `📦 Тариф: *${esc(plan.name)}*\n` +
-        (sub.expiresAt ? `📅 До: *${esc(new Date(sub.expiresAt).toLocaleDateString('ru-RU'))}*\n` : '') +
-        `\n🔗 *URL подписки:*\n\`${esc(url)}\`\n\n` +
-        `📲 Скопируйте и добавьте в *Happ VPN*\\.`,
-        { parse_mode: 'MarkdownV2' }
-    ).catch(() => { });
+    if (!global.happUserBot) {
+        bot.sendMessage(order.chatId,
+            `🎉 *Подписка активирована\\!*\n\n` +
+            `📦 Тариф: *${esc(plan.name)}*\n` +
+            (sub.expiresAt ? `📅 До: *${esc(new Date(sub.expiresAt).toLocaleDateString('ru-RU'))}*\n` : '') +
+            `\n🔗 *URL подписки:*\n\`${esc(url)}\`\n\n` +
+            `📲 Скопируйте и добавьте в *Happ VPN*\\.`,
+            { parse_mode: 'MarkdownV2' }
+        ).catch(() => { });
+    }
 
-    if (global.scheduleRelaySync) global.scheduleRelaySync();
-    return bot.answerCallbackQuery(query.id, { text: '✅ Подписка создана!' });
+    return bot.answerCallbackQuery(query.id, { text: activated.action === 'extended' ? '✅ Продлена!' : '✅ Создана!' });
 }
 
 // ===== REJECT =====
@@ -646,6 +629,7 @@ async function rejectOrder(bot, chatId, msgId, orderId, query) {
     const data = loadData();
     const order = (data.orders || []).find(o => o.id === orderId);
     if (!order) return bot.answerCallbackQuery(query.id, { text: '❌ Не найден' });
+    if (order.paymentProvider === 'yookassa') return bot.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
 
     order.status = 'rejected';
     order.rejectedAt = Date.now();

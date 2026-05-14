@@ -720,6 +720,7 @@ function getDefaultSettings() {
         stubTitle: '⛔ Доступ ограничен', stubDisabled: 'Подписка деактивирована', stubExpired: 'Подписка истекла',
         stubDeviceLimit: 'Лимит устройств исчерпан', stubNotFound: 'Подписка не найдена', stubNoToken: 'Токен не указан',
         paymentMethod: '', paymentInfo: '', paymentMethods: [],
+        yookassaEnabled: false, yookassaShopId: '', yookassaSecretKey: '', yookassaDescription: 'Оплата картой или СБП через YooKassa',
         notifySuspiciousIp: true
     };
 }
@@ -750,6 +751,125 @@ function normalizePaymentMethods(s = {}) {
     }
     return [];
 }
+
+function isYooKassaConfigured(s = {}) {
+    return !!(s.yookassaEnabled && s.yookassaShopId && s.yookassaSecretKey);
+}
+
+function yookassaRequest(settings, method, apiPath, body = null, idempotenceKey = '') {
+    return new Promise((resolve, reject) => {
+        const payload = body ? JSON.stringify(body) : '';
+        const headers = {
+            Authorization: 'Basic ' + Buffer.from(`${settings.yookassaShopId}:${settings.yookassaSecretKey}`).toString('base64'),
+            Accept: 'application/json',
+            'Content-Type': 'application/json'
+        };
+        if (payload) headers['Content-Length'] = Buffer.byteLength(payload);
+        if (idempotenceKey) headers['Idempotence-Key'] = idempotenceKey;
+
+        const req = https.request({
+            hostname: 'api.yookassa.ru',
+            path: apiPath,
+            method,
+            headers,
+            timeout: 15000
+        }, resp => {
+            let raw = '';
+            resp.setEncoding('utf8');
+            resp.on('data', chunk => raw += chunk);
+            resp.on('end', () => {
+                let parsed = {};
+                try { parsed = raw ? JSON.parse(raw) : {}; } catch { parsed = { raw }; }
+                if (resp.statusCode >= 200 && resp.statusCode < 300) return resolve(parsed);
+                const message = parsed.description || parsed.message || `YooKassa HTTP ${resp.statusCode}`;
+                const err = new Error(message);
+                err.response = parsed;
+                err.statusCode = resp.statusCode;
+                reject(err);
+            });
+        });
+        req.on('timeout', () => req.destroy(new Error('YooKassa request timeout')));
+        req.on('error', reject);
+        if (payload) req.write(payload);
+        req.end();
+    });
+}
+
+function makePublicUrl(req, data = null) {
+    const s = (data || loadData()).settings || {};
+    if (s.serverUrl) return s.serverUrl.replace(/\/+$/, '');
+    if (!req) return `http://localhost:${PORT}`;
+    return getBaseUrl(req).replace(/\/+$/, '');
+}
+
+function activatePlanForUser(data, plan, userId, meta = {}) {
+    if (!data.subscriptions) data.subscriptions = [];
+    const uid = parseInt(userId);
+    const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(uid) && s.enabled !== false);
+    let sub, action;
+
+    if (existing && plan.duration > 0) {
+        const base = (existing.expiresAt && existing.expiresAt > Date.now()) ? existing.expiresAt : Date.now();
+        existing.expiresAt = base + (plan.duration * 86400000);
+        if (plan.traffic > 0) existing.trafficTotal = (existing.trafficTotal || 0) + plan.traffic;
+        existing.notes = (existing.notes || '') + ` | +${plan.duration}д (${plan.name}${meta.note ? ', ' + meta.note : ''})`;
+        sub = existing;
+        action = 'extended';
+    } else {
+        sub = {
+            id: generateId(),
+            name: meta.name || `${plan.name}`,
+            trafficTotal: plan.traffic || 0,
+            trafficUsed: 0,
+            maxDevices: plan.maxDevices || 0,
+            token: generateToken(),
+            templateIds: plan.templateIds || [],
+            enabled: true,
+            expiresAt: plan.duration > 0 ? Date.now() + (plan.duration * 86400000) : 0,
+            notes: meta.note || '',
+            devices: [],
+            telegramUsers: [uid],
+            createdAt: Date.now(),
+            accessCount: 0,
+            orderId: meta.orderId || ''
+        };
+        data.subscriptions.push(sub);
+        action = 'created';
+    }
+
+    return { sub, action };
+}
+
+function notifySubscriptionActivated(userId, plan, sub, action, url) {
+    if (!global.happUserBot) return;
+    const msg = action === 'extended'
+        ? `✅ Подписка продлена!\n\n📦 ${plan.name}\n📅 До: ${sub.expiresAt ? new Date(sub.expiresAt).toLocaleDateString('ru-RU') : 'Бессрочно'}\n🔗 ${url}`
+        : `🎉 Подписка активирована!\n\n📦 ${plan.name}\n🔗 ${url}\n\nСкопируйте и добавьте в Happ VPN.`;
+    global.happUserBot.sendMessage(parseInt(userId), msg).catch(() => { });
+}
+
+function activateOrder(data, order, options = {}) {
+    if (!order || order.status === 'completed') return { alreadyCompleted: true, order };
+    const plan = (data.plans || []).find(p => p.id === order.planId);
+    if (!plan) throw new Error('Plan not found');
+
+    const { sub, action } = activatePlanForUser(data, plan, order.userId, {
+        name: `${plan.name} — ${order.firstName || 'User'}`,
+        note: `${options.source || 'Оплата'} | #${order.id.substring(0, 8)} | @${order.username || 'n/a'} | ${order.planName}`,
+        orderId: order.id
+    });
+    order.status = 'completed';
+    order.completedAt = Date.now();
+    order.subscriptionId = sub.id;
+    order.updatedAt = Date.now();
+
+    const baseUrl = options.baseUrl || makePublicUrl(null, data);
+    const subUrl = `${baseUrl}/sub?token=${sub.token}`;
+    notifySubscriptionActivated(order.chatId || order.userId, plan, sub, action, subUrl);
+    if (global.scheduleRelaySync) global.scheduleRelaySync();
+    return { order, plan, sub, action, subUrl };
+}
+global.activateOrder = activateOrder;
 
 function generateToken() { return crypto.randomBytes(32).toString('base64url'); }
 function generateId() { return crypto.randomBytes(8).toString('hex'); }
@@ -1775,10 +1895,21 @@ app.put('/api/orders/:id', authMiddleware, (req, res) => {
     const idx = (data.orders || []).findIndex(o => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Not found' });
     const { status } = req.body;
-    if (status !== undefined) data.orders[idx].status = status;
-    data.orders[idx].updatedAt = Date.now();
-    saveData(data);
-    res.json(data.orders[idx]);
+    try {
+        if (status === 'completed') {
+            if (data.orders[idx].paymentProvider === 'yookassa') {
+                return res.status(400).json({ error: 'YooKassa orders are confirmed automatically' });
+            }
+            activateOrder(data, data.orders[idx], { source: 'Ручное подтверждение', baseUrl: makePublicUrl(req, data) });
+        } else if (status !== undefined) {
+            data.orders[idx].status = status;
+            data.orders[idx].updatedAt = Date.now();
+        }
+        saveData(data);
+        res.json(data.orders[idx]);
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
 });
 
 app.delete('/api/orders/:id', authMiddleware, (req, res) => {
@@ -1803,6 +1934,8 @@ app.get('/api/shop/settings', (req, res) => {
         paymentMethod: s.paymentMethod || '',
         paymentInfo: s.paymentInfo || '',
         paymentMethods: normalizePaymentMethods(s).filter(m => m.enabled),
+        yookassaEnabled: isYooKassaConfigured(s),
+        yookassaDescription: s.yookassaDescription || 'Оплата картой или СБП через YooKassa',
         userBotWelcome: s.userBotWelcome || '',
         shopWelcomeShort: s.shopWelcomeShort || '',
         supportUrl: s.supportUrl || '',
@@ -1940,6 +2073,143 @@ app.post('/api/shop/create-order', (req, res) => {
     res.json({ ok: true, orderId: order.id });
 });
 
+function applyYooKassaPaymentResult(data, order, payment, baseUrl) {
+    if (!order) throw new Error('Order not found');
+    order.yookassaStatus = payment.status || order.yookassaStatus || '';
+    order.yookassaPaid = !!payment.paid;
+    order.updatedAt = Date.now();
+
+    const expected = Number(order.price || 0).toFixed(2);
+    const actual = payment.amount && payment.amount.value ? Number(payment.amount.value).toFixed(2) : '';
+    if (payment.status === 'succeeded') {
+        if (actual !== expected) throw new Error(`Payment amount mismatch: expected ${expected}, got ${actual}`);
+        return activateOrder(data, order, { source: 'YooKassa', baseUrl });
+    }
+
+    if (payment.status === 'canceled') {
+        order.status = 'canceled';
+        order.canceledAt = Date.now();
+    }
+    return { order };
+}
+
+app.post('/api/shop/yookassa/create-payment', async (req, res) => {
+    try {
+        const { planId, userId, username, firstName } = req.body;
+        if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
+
+        const data = loadData();
+        const settings = data.settings || {};
+        if (!isYooKassaConfigured(settings)) return res.status(400).json({ error: 'YooKassa is not configured' });
+
+        const plan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
+        if (!plan) return res.status(404).json({ error: 'Plan not found' });
+        if (!plan.price || plan.price <= 0) return res.status(400).json({ error: 'Invalid plan price' });
+
+        const order = {
+            id: generateId(),
+            planId: plan.id,
+            planName: plan.name,
+            price: Number(plan.price),
+            userId: parseInt(userId),
+            chatId: parseInt(userId),
+            username: username || '',
+            firstName: firstName || '',
+            paymentProvider: 'yookassa',
+            paymentMethod: 'YooKassa',
+            status: 'awaiting_payment',
+            createdAt: Date.now()
+        };
+
+        const baseUrl = makePublicUrl(req, data);
+        const payment = await yookassaRequest(settings, 'POST', '/v3/payments', {
+            amount: { value: Number(plan.price).toFixed(2), currency: 'RUB' },
+            capture: true,
+            confirmation: {
+                type: 'redirect',
+                return_url: `${baseUrl}/shop.html?order=${order.id}`
+            },
+            description: `HappVPN: ${plan.name}`,
+            metadata: {
+                orderId: order.id,
+                userId: String(userId),
+                planId: plan.id
+            }
+        }, `happvpn-${order.id}`);
+
+        order.yookassaPaymentId = payment.id;
+        order.yookassaStatus = payment.status || '';
+        order.confirmationUrl = payment.confirmation?.confirmation_url || '';
+
+        if (!data.orders) data.orders = [];
+        data.orders.push(order);
+        if (data.orders.length > 500) data.orders = data.orders.slice(-500);
+        saveData(data);
+
+        res.json({
+            ok: true,
+            orderId: order.id,
+            paymentId: order.yookassaPaymentId,
+            confirmationUrl: order.confirmationUrl,
+            status: order.status
+        });
+    } catch (e) {
+        console.log('YooKassa create payment error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/shop/yookassa/check-payment', async (req, res) => {
+    try {
+        const { orderId, userId } = req.body;
+        if (!orderId || !userId) return res.status(400).json({ error: 'Missing data' });
+        const data = loadData();
+        const order = (data.orders || []).find(o => o.id === orderId && o.userId === parseInt(userId));
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        if (!order.yookassaPaymentId) return res.status(400).json({ error: 'No YooKassa payment for this order' });
+
+        const settings = data.settings || {};
+        if (!isYooKassaConfigured(settings)) return res.status(400).json({ error: 'YooKassa is not configured' });
+
+        const payment = await yookassaRequest(settings, 'GET', `/v3/payments/${encodeURIComponent(order.yookassaPaymentId)}`);
+        const result = applyYooKassaPaymentResult(data, order, payment, makePublicUrl(req, data));
+        saveData(data);
+
+        res.json({
+            ok: true,
+            status: order.status,
+            yookassaStatus: order.yookassaStatus,
+            subUrl: result.subUrl || ''
+        });
+    } catch (e) {
+        console.log('YooKassa check payment error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/payments/yookassa/webhook', async (req, res) => {
+    try {
+        const event = req.body || {};
+        const paymentId = event.object && event.object.id;
+        if (!paymentId) return res.json({ ok: true });
+
+        const data = loadData();
+        const settings = data.settings || {};
+        if (!isYooKassaConfigured(settings)) return res.json({ ok: true });
+
+        const order = (data.orders || []).find(o => o.yookassaPaymentId === paymentId);
+        if (!order) return res.json({ ok: true });
+
+        const payment = await yookassaRequest(settings, 'GET', `/v3/payments/${encodeURIComponent(paymentId)}`);
+        applyYooKassaPaymentResult(data, order, payment, makePublicUrl(null, data));
+        saveData(data);
+        res.json({ ok: true });
+    } catch (e) {
+        console.log('YooKassa webhook error:', e.message);
+        res.status(200).json({ ok: false });
+    }
+});
+
 // Purchase with balance (instant, no admin approval needed)
 app.post('/api/shop/buy-with-balance', (req, res) => {
     const { planId, userId } = req.body;
@@ -1958,44 +2228,15 @@ app.post('/api/shop/buy-with-balance', (req, res) => {
     if (!user.balanceHistory) user.balanceHistory = [];
     user.balanceHistory.push({ amount: -plan.price, description: `Покупка: ${plan.name}`, date: Date.now() });
 
-    // Check if user already has an active subscription — extend it
-    if (!data.subscriptions) data.subscriptions = [];
     const uid = parseInt(userId);
-    const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(uid) && s.enabled !== false);
-
-    let sub, url, action;
-    if (existing && plan.duration > 0) {
-        // Extend existing subscription
-        const base = (existing.expiresAt && existing.expiresAt > Date.now()) ? existing.expiresAt : Date.now();
-        existing.expiresAt = base + (plan.duration * 86400000);
-        if (plan.traffic > 0) existing.trafficTotal = (existing.trafficTotal || 0) + plan.traffic;
-        existing.notes = (existing.notes || '') + ` | +${plan.duration}д (${plan.name})`;
-        sub = existing;
-        action = 'extended';
-        url = `${getBaseUrl(req)}/sub?token=${existing.token}`;
-    } else {
-        // Create new subscription
-        sub = {
-            id: generateId(), name: `${plan.name}`,
-            trafficTotal: plan.traffic || 0, trafficUsed: 0, maxDevices: plan.maxDevices || 0,
-            token: generateToken(), templateIds: plan.templateIds || [], enabled: true,
-            expiresAt: plan.duration > 0 ? Date.now() + (plan.duration * 86400000) : 0,
-            notes: `Баланс | User ${userId} | ${plan.name}`,
-            devices: [], telegramUsers: [uid], createdAt: Date.now(), accessCount: 0
-        };
-        data.subscriptions.push(sub);
-        action = 'created';
-        url = `${getBaseUrl(req)}/sub?token=${sub.token}`;
-    }
+    const { sub, action } = activatePlanForUser(data, plan, uid, {
+        note: `Баланс | User ${userId} | ${plan.name}`
+    });
+    const url = `${makePublicUrl(req, data)}/sub?token=${sub.token}`;
     saveData(data);
 
     // Notify user via bot
-    if (global.happUserBot) {
-        const msg = action === 'extended'
-            ? `✅ Подписка продлена!\n\n📦 ${plan.name}\n📅 До: ${new Date(sub.expiresAt).toLocaleDateString('ru-RU')}\n🔗 ${url}`
-            : `🎉 Подписка активирована!\n\n📦 ${plan.name}\n🔗 ${url}\n\nСкопируйте и добавьте в Happ VPN.`;
-        global.happUserBot.sendMessage(uid, msg).catch(() => { });
-    }
+    notifySubscriptionActivated(uid, plan, sub, action, url);
     if (global.scheduleRelaySync) global.scheduleRelaySync();
 
     res.json({ ok: true, subUrl: url, balance: user.balance, action });

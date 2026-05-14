@@ -604,15 +604,27 @@
                                     class="label-hint">(видны покупателям)</span></label><textarea
                                 id="settingPaymentInfo" placeholder="💳 Сбербанк: 2202 XXXX XXXX XXXX
 Имя получателя: Иванов И.И." class="form-input form-textarea" rows="3"></textarea></div>
-                        <div class="form-group">
-                            <label>Дополнительные способы оплаты <span class="label-hint">(можно включить несколько)</span></label>
-                            <div style="display:flex;gap:8px;align-items:center">
-                                <select id="paymentPresetSelect" class="form-input"></select>
-                                <button type="button" class="btn-outline btn-sm" id="btnAddPaymentMethod"
-                                    style="width:auto;white-space:nowrap">+ Добавить</button>
+                        <div class="settings-subcard">
+                            <div class="toggle-row">
+                                <h4>YooKassa — карты и СБП</h4>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="settingYooKassaEnabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group"><label for="settingYooKassaShopId">Shop ID</label><input
+                                    type="text" id="settingYooKassaShopId" placeholder="123456" class="form-input"></div>
+                            <div class="form-group"><label for="settingYooKassaSecretKey">Secret Key <span
+                                        class="label-hint">(оставь пустым, чтобы не менять)</span></label><input
+                                    type="password" id="settingYooKassaSecretKey" placeholder="live_..."
+                                    class="form-input"></div>
+                            <div class="form-group"><label for="settingYooKassaDescription">Описание для покупателя</label><input
+                                    type="text" id="settingYooKassaDescription"
+                                    placeholder="Оплата картой или СБП через YooKassa" class="form-input"></div>
+                            <div class="form-group"><label>Webhook URL для YooKassa</label>
+                                <div class="readonly-url" id="yookassaWebhookUrl">https://your-domain/api/payments/yookassa/webhook</div>
                             </div>
                         </div>
-                        <div id="paymentMethodsList" class="payment-methods-list"></div>
                         <div class="form-group"><label for="settingUserBotWelcome">Приветственное
                                 сообщение</label><textarea id="settingUserBotWelcome"
                                 placeholder="Добро пожаловать! Здесь вы можете приобрести VPN подписку."
