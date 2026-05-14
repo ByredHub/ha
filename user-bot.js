@@ -596,7 +596,7 @@ async function approveOrder(bot, chatId, msgId, orderId, query) {
     if (!plan) return bot.answerCallbackQuery(query.id, { text: '❌ Тариф не найден' });
 
     const activated = global.activateOrder
-        ? global.activateOrder(data, order, { source: 'Ручное подтверждение' })
+        ? await global.activateOrder(data, order, { source: 'Ручное подтверждение' })
         : null;
     if (!activated) return bot.answerCallbackQuery(query.id, { text: '❌ Сервер не готов' });
     saveData(data);

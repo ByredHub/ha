@@ -659,6 +659,44 @@
                                 <div class="readonly-url" id="plategaWebhookUrl">https://your-domain/api/payments/platega/webhook</div>
                             </div>
                         </div>
+                        <div class="settings-subcard">
+                            <div class="toggle-row">
+                                <h4>3DH donor — авто-создание VLESS</h4>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="settingThreeDhEnabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group"><label for="settingThreeDhPin">PIN аккаунта 3DH <span
+                                        class="label-hint">(оставь пустым, чтобы не менять)</span></label><input
+                                    type="password" id="settingThreeDhPin" placeholder="PIN" class="form-input"></div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="settingThreeDhMode">Режим</label><input
+                                        type="number" id="settingThreeDhMode" placeholder="7" min="1" class="form-input"></div>
+                                <div class="form-group"><label for="settingThreeDhDeviceType">Тип устройства</label><select
+                                        id="settingThreeDhDeviceType" class="form-input">
+                                        <option value="2">iOS</option>
+                                        <option value="3">Android</option>
+                                        <option value="7">Windows</option>
+                                        <option value="8">MacOS</option>
+                                        <option value="5">Linux</option>
+                                        <option value="6">TV</option>
+                                        <option value="9">Router</option>
+                                    </select></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="settingThreeDhProtocol">Протокол</label><input
+                                        type="text" id="settingThreeDhProtocol" placeholder="vless" class="form-input"></div>
+                                <div class="form-group"><label for="settingThreeDhLocationId">ID сервера <span
+                                            class="label-hint">(пусто = авто)</span></label><input type="text"
+                                        id="settingThreeDhLocationId" placeholder="auto" class="form-input"></div>
+                            </div>
+                            <div class="form-group"><label for="settingThreeDhNameTemplate">Имя устройства в 3DH</label><input
+                                    type="text" id="settingThreeDhNameTemplate" placeholder="HappVPN-{userId}-{order}"
+                                    class="form-input">
+                                <p class="hint">Плейсхолдеры: {userId}, {username}, {firstName}, {plan}, {order}, {server}, {country}, {proto}</p>
+                            </div>
+                        </div>
                         <div class="form-group"><label for="settingUserBotWelcome">Приветственное
                                 сообщение</label><textarea id="settingUserBotWelcome"
                                 placeholder="Добро пожаловать! Здесь вы можете приобрести VPN подписку."

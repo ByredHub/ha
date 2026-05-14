@@ -830,6 +830,16 @@
             const base = (settings.serverUrl || window.location.origin).replace(/\/+$/, '');
             $('#plategaWebhookUrl').textContent = `${base}/api/payments/platega/webhook`;
         }
+        if ($('#settingThreeDhEnabled')) $('#settingThreeDhEnabled').checked = !!settings.threeDhEnabled;
+        if ($('#settingThreeDhPin')) {
+            $('#settingThreeDhPin').value = '';
+            $('#settingThreeDhPin').placeholder = settings.threeDhPin ? 'Сохранён, введи новый для замены' : 'PIN';
+        }
+        if ($('#settingThreeDhMode')) $('#settingThreeDhMode').value = settings.threeDhMode || 7;
+        if ($('#settingThreeDhDeviceType')) $('#settingThreeDhDeviceType').value = String(settings.threeDhDeviceType || 2);
+        if ($('#settingThreeDhProtocol')) $('#settingThreeDhProtocol').value = settings.threeDhProtocol || 'vless';
+        if ($('#settingThreeDhLocationId')) $('#settingThreeDhLocationId').value = settings.threeDhLocationId || '';
+        if ($('#settingThreeDhNameTemplate')) $('#settingThreeDhNameTemplate').value = settings.threeDhNameTemplate || 'HappVPN-{userId}-{order}';
         if ($('#settingUserBotWelcome')) $('#settingUserBotWelcome').value = settings.userBotWelcome || '';
         if ($('#settingShopWelcomeShort')) $('#settingShopWelcomeShort').value = settings.shopWelcomeShort || '';
         if ($('#settingUserBotLink')) $('#settingUserBotLink').value = settings.userBotLink || '';
@@ -883,6 +893,12 @@
             plategaMerchantId: $('#settingPlategaMerchantId') ? $('#settingPlategaMerchantId').value.trim() : '',
             plategaPaymentMethod: $('#settingPlategaPaymentMethod') ? parseInt($('#settingPlategaPaymentMethod').value) || 11 : 11,
             plategaDescription: $('#settingPlategaDescription') ? $('#settingPlategaDescription').value.trim() : '',
+            threeDhEnabled: $('#settingThreeDhEnabled') ? $('#settingThreeDhEnabled').checked : false,
+            threeDhMode: $('#settingThreeDhMode') ? parseInt($('#settingThreeDhMode').value) || 7 : 7,
+            threeDhDeviceType: $('#settingThreeDhDeviceType') ? parseInt($('#settingThreeDhDeviceType').value) || 2 : 2,
+            threeDhProtocol: $('#settingThreeDhProtocol') ? $('#settingThreeDhProtocol').value.trim() || 'vless' : 'vless',
+            threeDhLocationId: $('#settingThreeDhLocationId') ? $('#settingThreeDhLocationId').value.trim() : '',
+            threeDhNameTemplate: $('#settingThreeDhNameTemplate') ? $('#settingThreeDhNameTemplate').value.trim() || 'HappVPN-{userId}-{order}' : 'HappVPN-{userId}-{order}',
             userBotWelcome: $('#settingUserBotWelcome') ? $('#settingUserBotWelcome').value.trim() : '',
             shopWelcomeShort: $('#settingShopWelcomeShort') ? $('#settingShopWelcomeShort').value.trim() : '',
             userBotLink: $('#settingUserBotLink') ? $('#settingUserBotLink').value.trim() : '',
@@ -893,6 +909,8 @@
         if (yookassaSecret) body.yookassaSecretKey = yookassaSecret;
         const plategaSecret = $('#settingPlategaSecretKey') ? $('#settingPlategaSecretKey').value.trim() : '';
         if (plategaSecret) body.plategaSecretKey = plategaSecret;
+        const threeDhPin = $('#settingThreeDhPin') ? $('#settingThreeDhPin').value.trim() : '';
+        if (threeDhPin) body.threeDhPin = threeDhPin;
         const pw = $('#settingPassword').value;
         if (pw) body.adminPassword = pw;
         try { settings = await api('POST', '/api/settings', body); showToast('Сохранено', 'success'); $('#settingPassword').value = ''; }

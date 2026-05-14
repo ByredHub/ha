@@ -830,6 +830,7 @@ function getDefaultSettings() {
         paymentMethod: '', paymentInfo: '', paymentMethods: [],
         yookassaEnabled: false, yookassaShopId: '', yookassaSecretKey: '', yookassaDescription: 'Оплата картой или СБП через YooKassa',
         plategaEnabled: false, plategaMerchantId: '', plategaSecretKey: '', plategaPaymentMethod: 11, plategaDescription: 'Оплата картой или СБП через Platega',
+        threeDhEnabled: false, threeDhPin: '', threeDhMode: 7, threeDhDeviceType: 2, threeDhProtocol: 'vless', threeDhLocationId: '', threeDhNameTemplate: 'HappVPN-{userId}-{order}',
         notifySuspiciousIp: true
     };
 }
@@ -867,6 +868,10 @@ function isYooKassaConfigured(s = {}) {
 
 function isPlategaConfigured(s = {}) {
     return !!(s.plategaEnabled && s.plategaMerchantId && s.plategaSecretKey);
+}
+
+function isThreeDhConfigured(s = {}) {
+    return !!(s.threeDhEnabled && s.threeDhPin);
 }
 
 function secureCompare(a = '', b = '') {
@@ -953,6 +958,262 @@ function plategaRequest(settings, method, apiPath, body = null) {
     });
 }
 
+function updateCookieJar(jar, setCookieHeaders = []) {
+    const headers = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders].filter(Boolean);
+    for (const header of headers) {
+        const pair = String(header).split(';')[0];
+        const eq = pair.indexOf('=');
+        if (eq > 0) jar[pair.slice(0, eq)] = pair.slice(eq + 1);
+    }
+}
+
+function getCookieHeader(jar) {
+    return Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+function decodeHtmlAttr(value = '') {
+    return String(value)
+        .replace(/&quot;/g, '"')
+        .replace(/&#34;/g, '"')
+        .replace(/&#x27;/g, "'")
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+}
+
+function extractHiddenInput(html, name) {
+    const re = new RegExp(`<input[^>]+name=["']${name}["'][^>]*>`, 'i');
+    const m = String(html).match(re);
+    if (!m) return '';
+    const value = m[0].match(/\svalue=["']([^"']*)["']/i);
+    return value ? decodeHtmlAttr(value[1]) : '';
+}
+
+function buildMultipart(fields) {
+    const boundary = '----HappVPN3DH' + crypto.randomBytes(12).toString('hex');
+    const chunks = [];
+    for (const [key, value] of Object.entries(fields)) {
+        chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value ?? ''}\r\n`));
+    }
+    chunks.push(Buffer.from(`--${boundary}--\r\n`));
+    return { boundary, body: Buffer.concat(chunks) };
+}
+
+function threeDhRequest(method, pathName, body = null, jar = {}, extraHeaders = {}, redirectDepth = 0) {
+    return new Promise((resolve, reject) => {
+        const url = new URL(pathName, 'https://ru.3dh.live');
+        const headers = {
+            Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+            'User-Agent': 'HappVPN/2.0',
+            ...extraHeaders
+        };
+        const cookie = getCookieHeader(jar);
+        if (cookie) headers.Cookie = cookie;
+        if (body) headers['Content-Length'] = Buffer.byteLength(body);
+
+        const req = https.request({
+            hostname: url.hostname,
+            path: `${url.pathname}${url.search}`,
+            method,
+            headers,
+            timeout: 20000
+        }, resp => {
+            updateCookieJar(jar, resp.headers['set-cookie']);
+            let raw = '';
+            resp.setEncoding('utf8');
+            resp.on('data', chunk => raw += chunk);
+            resp.on('end', async () => {
+                if ([301, 302, 303, 307, 308].includes(resp.statusCode) && resp.headers.location && redirectDepth < 5) {
+                    try {
+                        const next = await threeDhRequest('GET', resp.headers.location, null, jar, { Referer: url.href }, redirectDepth + 1);
+                        return resolve(next);
+                    } catch (e) {
+                        return reject(e);
+                    }
+                }
+                resolve({ statusCode: resp.statusCode, headers: resp.headers, body: raw, jar });
+            });
+        });
+        req.on('timeout', () => req.destroy(new Error('3DH request timeout')));
+        req.on('error', reject);
+        if (body) req.write(body);
+        req.end();
+    });
+}
+
+async function threeDhLogin(settings) {
+    const jar = {};
+    const loginPage = await threeDhRequest('GET', '/users/simple-login', null, jar);
+    const csrfToken = extractHiddenInput(loginPage.body, 'csrf_token');
+    if (!csrfToken) throw new Error('3DH login form did not return csrf_token');
+
+    const payload = new URLSearchParams({
+        csrf_token: csrfToken,
+        fp: '',
+        password: String(settings.threeDhPin || ''),
+        action: 'simple_login'
+    }).toString();
+
+    await threeDhRequest('POST', '/users/auth', payload, jar, {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: 'https://ru.3dh.live',
+        Referer: 'https://ru.3dh.live/users/simple-login'
+    });
+    return jar;
+}
+
+function parseThreeDhJson(response, fallbackMessage) {
+    try {
+        return JSON.parse(response.body);
+    } catch {
+        throw new Error(fallbackMessage);
+    }
+}
+
+async function threeDhGetServers(settings, jar) {
+    const mode = parseInt(settings.threeDhMode) || 7;
+    const resp = await threeDhRequest('GET', `/vpn/get-servers?mode=${encodeURIComponent(mode)}`, null, jar);
+    const servers = parseThreeDhJson(resp, '3DH did not return server list as JSON');
+    if (!Array.isArray(servers)) throw new Error('3DH server list has unexpected format');
+    return servers;
+}
+
+function pickThreeDhServer(settings, servers) {
+    const configuredId = String(settings.threeDhLocationId || '').trim();
+    if (configuredId) {
+        const found = servers.find(s => String(s.id) === configuredId);
+        if (!found) throw new Error(`3DH location ${configuredId} not found`);
+        return found;
+    }
+
+    const wantedProto = String(settings.threeDhProtocol || 'vless').trim().toLowerCase();
+    const filtered = wantedProto
+        ? servers.filter(s => String(s.type || s.proto || '').toLowerCase() === wantedProto)
+        : servers.slice();
+    if (!filtered.length) throw new Error(`3DH has no servers for protocol ${wantedProto || 'any'}`);
+
+    return filtered.sort((a, b) => Number(a.client_count || 0) - Number(b.client_count || 0))[0];
+}
+
+function formatThreeDhDeviceName(template, order, plan, server) {
+    const safeOrder = String(order.id || generateId());
+    const name = String(template || 'HappVPN-{userId}-{order}')
+        .replace(/\{userId\}/gi, order.userId || '')
+        .replace(/\{username\}/gi, order.username || '')
+        .replace(/\{firstName\}/gi, order.firstName || '')
+        .replace(/\{plan\}/gi, plan.name || order.planName || '')
+        .replace(/\{order\}/gi, safeOrder.slice(0, 8))
+        .replace(/\{server\}/gi, server.location_name_ru || server.location_name || server.name || server.id || '')
+        .replace(/\{country\}/gi, server.location_name_ru || server.location_name || '')
+        .replace(/\{proto\}/gi, server.proto || server.type || '')
+        .trim()
+        .slice(0, 80);
+    return name || `HappVPN-${order.userId || safeOrder.slice(0, 8)}`;
+}
+
+function extractThreeDhConfig(html, deviceName) {
+    const rows = String(html).split(/<tr\b/i);
+    for (const row of rows) {
+        if (!row.includes(deviceName)) continue;
+        const input = row.match(/<input[^>]+(?:class=["'][^"']*vpnString[^"']*["'][^>]*|[^>]*class=["'][^"']*vpnString[^"']*["'])[^>]*>/i);
+        if (!input) continue;
+        const value = input[0].match(/\svalue=["']([^"']+)["']/i);
+        const id = input[0].match(/\sdata-id=["']([^"']+)["']/i);
+        if (value) return { config: decodeHtmlAttr(value[1]), deviceId: id ? decodeHtmlAttr(id[1]) : '' };
+    }
+
+    const inputs = [...String(html).matchAll(/<input[^>]+(?:class=["'][^"']*vpnString[^"']*["'][^>]*|[^>]*class=["'][^"']*vpnString[^"']*["'])[^>]*>/gi)];
+    if (!inputs.length) return null;
+    const last = inputs[inputs.length - 1][0];
+    const value = last.match(/\svalue=["']([^"']+)["']/i);
+    const id = last.match(/\sdata-id=["']([^"']+)["']/i);
+    return value ? { config: decodeHtmlAttr(value[1]), deviceId: id ? decodeHtmlAttr(id[1]) : '' } : null;
+}
+
+async function createThreeDhDevice(settings, order, plan) {
+    if (!isThreeDhConfigured(settings)) return null;
+
+    const jar = await threeDhLogin(settings);
+    const servers = await threeDhGetServers(settings, jar);
+    const server = pickThreeDhServer(settings, servers);
+    const name = formatThreeDhDeviceName(settings.threeDhNameTemplate, order, plan, server);
+    const deviceType = parseInt(settings.threeDhDeviceType) || 2;
+    const multipart = buildMultipart({ name, type: deviceType, location: server.id });
+
+    const createResp = await threeDhRequest('POST', '/vpn/create', multipart.body, jar, {
+        'Content-Type': `multipart/form-data; boundary=${multipart.boundary}`,
+        Origin: 'https://ru.3dh.live',
+        Referer: 'https://ru.3dh.live/vpn/create'
+    });
+
+    if (createResp.statusCode >= 400) throw new Error(`3DH create device HTTP ${createResp.statusCode}`);
+    const contentType = createResp.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+        const result = parseThreeDhJson(createResp, '3DH create device returned invalid JSON');
+        if (result.status === 'error') throw new Error(result.message || '3DH create device failed');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const listResp = await threeDhRequest('GET', '/vpn/', null, jar);
+    const extracted = extractThreeDhConfig(listResp.body, name);
+    if (!extracted || !extracted.config) throw new Error('3DH device created, but config was not found');
+    if (!String(extracted.config).trim().startsWith('vless://')) {
+        throw new Error('3DH returned non-VLESS config; select a VLESS 3DH protocol/server');
+    }
+
+    return {
+        name,
+        serverId: server.id,
+        serverName: server.location_name_ru || server.location_name || server.name || '',
+        protocol: server.type || server.proto || '',
+        deviceId: extracted.deviceId,
+        config: extracted.config.trim()
+    };
+}
+
+function mergeIds(...lists) {
+    return [...new Set(lists.flat().filter(Boolean))];
+}
+
+async function attachThreeDhTemplateForOrder(data, order, plan) {
+    const settings = data.settings || {};
+    if (!isThreeDhConfigured(settings)) return [];
+    if (order.threeDhTemplateId) return [order.threeDhTemplateId];
+
+    const device = await createThreeDhDevice(settings, order, plan);
+    if (!device) return [];
+
+    const template = {
+        id: generateId(),
+        name: `3DH ${order.userId} ${device.serverName || device.serverId || ''}`.trim(),
+        donorUrl: '',
+        uris: [device.config],
+        uriDirect: [true],
+        uriNames: [device.name],
+        enabled: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        threeDh: {
+            deviceId: device.deviceId,
+            deviceName: device.name,
+            serverId: device.serverId,
+            serverName: device.serverName,
+            protocol: device.protocol,
+            orderId: order.id || ''
+        }
+    };
+
+    if (!data.templates) data.templates = [];
+    data.templates.push(template);
+    order.threeDhTemplateId = template.id;
+    order.threeDhDeviceId = device.deviceId;
+    order.threeDhDeviceName = device.name;
+    order.threeDhServerId = device.serverId;
+    order.threeDhServerName = device.serverName;
+    return [template.id];
+}
+
 function makePublicUrl(req, data = null) {
     const s = (data || loadData()).settings || {};
     if (s.serverUrl) return s.serverUrl.replace(/\/+$/, '');
@@ -964,12 +1225,14 @@ function activatePlanForUser(data, plan, userId, meta = {}) {
     if (!data.subscriptions) data.subscriptions = [];
     const uid = parseInt(userId);
     const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(uid) && s.enabled !== false);
+    const templateIds = mergeIds(plan.templateIds || [], meta.templateIds || []);
     let sub, action;
 
     if (existing && plan.duration > 0) {
         const base = (existing.expiresAt && existing.expiresAt > Date.now()) ? existing.expiresAt : Date.now();
         existing.expiresAt = base + (plan.duration * 86400000);
         if (plan.traffic > 0) existing.trafficTotal = (existing.trafficTotal || 0) + plan.traffic;
+        if (templateIds.length) existing.templateIds = mergeIds(existing.templateIds || [], templateIds);
         existing.notes = (existing.notes || '') + ` | +${plan.duration}д (${plan.name}${meta.note ? ', ' + meta.note : ''})`;
         sub = existing;
         action = 'extended';
@@ -981,7 +1244,7 @@ function activatePlanForUser(data, plan, userId, meta = {}) {
             trafficUsed: 0,
             maxDevices: plan.maxDevices || 0,
             token: generateToken(),
-            templateIds: plan.templateIds || [],
+            templateIds,
             enabled: true,
             expiresAt: plan.duration > 0 ? Date.now() + (plan.duration * 86400000) : 0,
             notes: meta.note || '',
@@ -1006,15 +1269,19 @@ function notifySubscriptionActivated(userId, plan, sub, action, url) {
     global.happUserBot.sendMessage(parseInt(userId), msg).catch(() => { });
 }
 
-function activateOrder(data, order, options = {}) {
+async function activateOrder(data, order, options = {}) {
     if (!order || order.status === 'completed') return { alreadyCompleted: true, order };
-    const plan = (data.plans || []).find(p => p.id === order.planId);
+    const basePlan = (data.plans || []).find(p => p.id === order.planId);
+    const plan = basePlan ? { ...basePlan, templateIds: mergeIds(basePlan.templateIds || []) } : null;
     if (!plan) throw new Error('Plan not found');
+    const threeDhTemplateIds = await attachThreeDhTemplateForOrder(data, order, plan);
+    plan.templateIds = mergeIds(plan.templateIds || [], threeDhTemplateIds);
 
     const { sub, action } = activatePlanForUser(data, plan, order.userId, {
         name: `${plan.name} — ${order.firstName || 'User'}`,
         note: `${options.source || 'Оплата'} | #${order.id.substring(0, 8)} | @${order.username || 'n/a'} | ${order.planName}`,
-        orderId: order.id
+        orderId: order.id,
+        templateIds: threeDhTemplateIds
     });
     order.status = 'completed';
     order.completedAt = Date.now();
@@ -2068,7 +2335,7 @@ app.get('/api/orders', authMiddleware, (req, res) => {
     res.json(filtered);
 });
 
-app.put('/api/orders/:id', authMiddleware, (req, res) => {
+app.put('/api/orders/:id', authMiddleware, async (req, res) => {
     const data = loadData();
     const idx = (data.orders || []).findIndex(o => o.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Not found' });
@@ -2078,7 +2345,7 @@ app.put('/api/orders/:id', authMiddleware, (req, res) => {
             if (['yookassa', 'platega'].includes(data.orders[idx].paymentProvider)) {
                 return res.status(400).json({ error: 'Gateway orders are confirmed automatically' });
             }
-            activateOrder(data, data.orders[idx], { source: 'Ручное подтверждение', baseUrl: makePublicUrl(req, data) });
+            await activateOrder(data, data.orders[idx], { source: 'Ручное подтверждение', baseUrl: makePublicUrl(req, data) });
         } else if (status !== undefined) {
             data.orders[idx].status = status;
             data.orders[idx].updatedAt = Date.now();
@@ -2253,7 +2520,7 @@ app.post('/api/shop/create-order', (req, res) => {
     res.json({ ok: true, orderId: order.id });
 });
 
-function applyYooKassaPaymentResult(data, order, payment, baseUrl) {
+async function applyYooKassaPaymentResult(data, order, payment, baseUrl) {
     if (!order) throw new Error('Order not found');
     order.yookassaStatus = payment.status || order.yookassaStatus || '';
     order.yookassaPaid = !!payment.paid;
@@ -2263,7 +2530,7 @@ function applyYooKassaPaymentResult(data, order, payment, baseUrl) {
     const actual = payment.amount && payment.amount.value ? Number(payment.amount.value).toFixed(2) : '';
     if (payment.status === 'succeeded') {
         if (actual !== expected) throw new Error(`Payment amount mismatch: expected ${expected}, got ${actual}`);
-        return activateOrder(data, order, { source: 'YooKassa', baseUrl });
+        return await activateOrder(data, order, { source: 'YooKassa', baseUrl });
     }
 
     if (payment.status === 'canceled') {
@@ -2352,7 +2619,7 @@ app.post('/api/shop/yookassa/check-payment', async (req, res) => {
         if (!isYooKassaConfigured(settings)) return res.status(400).json({ error: 'YooKassa is not configured' });
 
         const payment = await yookassaRequest(settings, 'GET', `/v3/payments/${encodeURIComponent(order.yookassaPaymentId)}`);
-        const result = applyYooKassaPaymentResult(data, order, payment, makePublicUrl(req, data));
+        const result = await applyYooKassaPaymentResult(data, order, payment, makePublicUrl(req, data));
         saveData(data);
 
         res.json({
@@ -2381,7 +2648,7 @@ app.post('/api/payments/yookassa/webhook', async (req, res) => {
         if (!order) return res.json({ ok: true });
 
         const payment = await yookassaRequest(settings, 'GET', `/v3/payments/${encodeURIComponent(paymentId)}`);
-        applyYooKassaPaymentResult(data, order, payment, makePublicUrl(null, data));
+        await applyYooKassaPaymentResult(data, order, payment, makePublicUrl(null, data));
         saveData(data);
         res.json({ ok: true });
     } catch (e) {
@@ -2396,7 +2663,7 @@ function getPlategaAmount(payment) {
     return null;
 }
 
-function applyPlategaPaymentResult(data, order, payment, baseUrl) {
+async function applyPlategaPaymentResult(data, order, payment, baseUrl) {
     if (!order) throw new Error('Order not found');
     order.plategaStatus = payment.status || order.plategaStatus || '';
     order.updatedAt = Date.now();
@@ -2407,7 +2674,7 @@ function applyPlategaPaymentResult(data, order, payment, baseUrl) {
 
     if (payment.status === 'CONFIRMED') {
         if (actual !== expected) throw new Error(`Payment amount mismatch: expected ${expected}, got ${actual}`);
-        return activateOrder(data, order, { source: 'Platega', baseUrl });
+        return await activateOrder(data, order, { source: 'Platega', baseUrl });
     }
 
     if (payment.status === 'CANCELED') {
@@ -2502,7 +2769,7 @@ app.post('/api/shop/platega/check-payment', async (req, res) => {
         if (!isPlategaConfigured(settings)) return res.status(400).json({ error: 'Platega is not configured' });
 
         const payment = await plategaRequest(settings, 'GET', `/transaction/${encodeURIComponent(order.plategaTransactionId)}`);
-        const result = applyPlategaPaymentResult(data, order, payment, makePublicUrl(req, data));
+        const result = await applyPlategaPaymentResult(data, order, payment, makePublicUrl(req, data));
         saveData(data);
 
         res.json({
@@ -2537,7 +2804,7 @@ app.post('/api/payments/platega/webhook', async (req, res) => {
         if (!order) return res.json({ ok: true });
 
         const payment = await plategaRequest(settings, 'GET', `/transaction/${encodeURIComponent(transactionId)}`);
-        applyPlategaPaymentResult(data, order, payment, makePublicUrl(null, data));
+        await applyPlategaPaymentResult(data, order, payment, makePublicUrl(null, data));
         saveData(data);
         res.json({ ok: true });
     } catch (e) {
@@ -2547,35 +2814,65 @@ app.post('/api/payments/platega/webhook', async (req, res) => {
 });
 
 // Purchase with balance (instant, no admin approval needed)
-app.post('/api/shop/buy-with-balance', (req, res) => {
-    const { planId, userId } = req.body;
-    if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
-    const data = loadData();
-    const plan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
-    if (!plan) return res.status(404).json({ error: 'Plan not found' });
+app.post('/api/shop/buy-with-balance', async (req, res) => {
+    try {
+        const { planId, userId } = req.body;
+        if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
+        const data = loadData();
+        const basePlan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
+        if (!basePlan) return res.status(404).json({ error: 'Plan not found' });
+        const plan = { ...basePlan, templateIds: mergeIds(basePlan.templateIds || []) };
 
-    if (!data.shopUsers) data.shopUsers = [];
-    let user = data.shopUsers.find(u => u.userId === parseInt(userId));
-    if (!user) return res.status(400).json({ error: 'Not enough balance' });
-    if ((user.balance || 0) < plan.price) return res.status(400).json({ error: 'Not enough balance' });
+        if (!data.shopUsers) data.shopUsers = [];
+        let user = data.shopUsers.find(u => u.userId === parseInt(userId));
+        if (!user) return res.status(400).json({ error: 'Not enough balance' });
+        if ((user.balance || 0) < plan.price) return res.status(400).json({ error: 'Not enough balance' });
 
-    // Deduct balance
-    user.balance -= plan.price;
-    if (!user.balanceHistory) user.balanceHistory = [];
-    user.balanceHistory.push({ amount: -plan.price, description: `Покупка: ${plan.name}`, date: Date.now() });
+        const uid = parseInt(userId);
+        const donorOrder = {
+            id: generateId(),
+            planId: plan.id,
+            planName: plan.name,
+            userId: uid,
+            chatId: uid,
+            username: user.username || '',
+            firstName: user.firstName || '',
+            status: 'balance_processing',
+            createdAt: Date.now()
+        };
+        const threeDhTemplateIds = await attachThreeDhTemplateForOrder(data, donorOrder, plan);
+        plan.templateIds = mergeIds(plan.templateIds || [], threeDhTemplateIds);
 
-    const uid = parseInt(userId);
-    const { sub, action } = activatePlanForUser(data, plan, uid, {
-        note: `Баланс | User ${userId} | ${plan.name}`
-    });
-    const url = `${makePublicUrl(req, data)}/sub?token=${sub.token}`;
-    saveData(data);
+        // Deduct balance only after external donor provisioning succeeds.
+        user.balance -= plan.price;
+        if (!user.balanceHistory) user.balanceHistory = [];
+        user.balanceHistory.push({ amount: -plan.price, description: `Покупка: ${plan.name}`, date: Date.now() });
 
-    // Notify user via bot
-    notifySubscriptionActivated(uid, plan, sub, action, url);
-    if (global.scheduleRelaySync) global.scheduleRelaySync();
+        const { sub, action } = activatePlanForUser(data, plan, uid, {
+            note: `Баланс | User ${userId} | ${plan.name}`,
+            templateIds: threeDhTemplateIds
+        });
+        donorOrder.status = 'completed';
+        donorOrder.subscriptionId = sub.id;
+        donorOrder.completedAt = Date.now();
+        if (threeDhTemplateIds.length) {
+            if (!data.orders) data.orders = [];
+            data.orders.push(donorOrder);
+            if (data.orders.length > 500) data.orders = data.orders.slice(-500);
+        }
 
-    res.json({ ok: true, subUrl: url, balance: user.balance, action });
+        const url = `${makePublicUrl(req, data)}/sub?token=${sub.token}`;
+        saveData(data);
+
+        // Notify user via bot
+        notifySubscriptionActivated(uid, plan, sub, action, url);
+        if (global.scheduleRelaySync) global.scheduleRelaySync();
+
+        res.json({ ok: true, subUrl: url, balance: user.balance, action });
+    } catch (e) {
+        console.log('Balance purchase error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
 });
 
 // Buy additional devices

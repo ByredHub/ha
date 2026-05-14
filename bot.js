@@ -745,7 +745,7 @@ function setupBotHandlers(botInstance) {
             if (!plan) return botInstance.answerCallbackQuery(query.id, { text: '❌ Тариф не найден' });
 
             const activated = global.activateOrder
-                ? global.activateOrder(data, order, { source: 'Ручное подтверждение' })
+                ? await global.activateOrder(data, order, { source: 'Ручное подтверждение' })
                 : null;
             if (!activated) return botInstance.answerCallbackQuery(query.id, { text: '❌ Сервер не готов' });
             saveData(data);
