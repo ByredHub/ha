@@ -566,15 +566,37 @@ async function syncTemplate(tpl) {
         const lines = decoded.split('\n').map(l => l.trim()).filter(l => l.startsWith('vless://'));
         if (lines.length === 0) return false;
 
-        // Build map of old URI base → custom name (from uriNames array)
+        // Build map of old URI identity → settings. Donor subscriptions may rotate UUIDs,
+        // so use server/transport identity instead of the full VLESS link.
         const oldNames = tpl.uriNames || [];
         const getBase = (uri) => { const h = uri.lastIndexOf('#'); return h > -1 ? uri.substring(0, h) : uri; };
-        const getOrigName = (uri) => { const h = uri.lastIndexOf('#'); if (h === -1) return ''; try { return decodeURIComponent(uri.substring(h + 1)); } catch { return uri.substring(h + 1); } };
-
-        // Map: base (without #name) → custom name
-        const customNameMap = {};
+        const getStableKey = (uri) => {
+            const parsed = parseVlessUri(uri);
+            if (!parsed) return getBase(uri);
+            const raw = parsed.raw || {};
+            return [
+                parsed.address,
+                parsed.port,
+                parsed.security,
+                parsed.type,
+                parsed.sni,
+                parsed.pbk,
+                parsed.sid,
+                parsed.path,
+                parsed.serviceName,
+                parsed.headerType,
+                raw.host || '',
+                raw.authority || ''
+            ].join('|');
+        };
+        // Map: stable server key / base (without #name) → custom name
+        const customNameByKey = {};
+        const customNameByBase = {};
         (tpl.uris || []).forEach((uri, i) => {
-            if (oldNames[i]) customNameMap[getBase(uri)] = oldNames[i];
+            if (oldNames[i]) {
+                customNameByKey[getStableKey(uri)] = oldNames[i];
+                customNameByBase[getBase(uri)] = oldNames[i];
+            }
         });
 
         // Check if base URIs actually changed (ignore name changes)
@@ -589,17 +611,26 @@ async function syncTemplate(tpl) {
         const newNames = [];
         for (let i = 0; i < lines.length; i++) {
             const base = getBase(lines[i]);
-            if (customNameMap[base]) {
-                newNames[i] = customNameMap[base];
-            }
+            const key = getStableKey(lines[i]);
+            if (customNameByKey[key]) newNames[i] = customNameByKey[key];
+            else if (customNameByBase[base]) newNames[i] = customNameByBase[base];
         }
 
-        // Also preserve uriDirect settings by matching bases
-        const oldDirectMap = {};
+        // Also preserve uriDirect settings by matching stable server identity.
+        const oldDirectByKey = {};
+        const oldDirectByBase = {};
+        const oldDirectByIndex = tpl.uriDirect || [];
         (tpl.uris || []).forEach((uri, i) => {
-            if ((tpl.uriDirect || [])[i]) oldDirectMap[getBase(uri)] = true;
+            if (oldDirectByIndex[i]) {
+                oldDirectByKey[getStableKey(uri)] = true;
+                oldDirectByBase[getBase(uri)] = true;
+            }
         });
-        const newDirect = lines.map(uri => !!oldDirectMap[getBase(uri)]);
+        const newDirect = lines.map((uri, i) => {
+            const key = getStableKey(uri);
+            const base = getBase(uri);
+            return !!(oldDirectByKey[key] || oldDirectByBase[base] || oldDirectByIndex[i]);
+        });
 
         tpl.uris = lines;
         tpl.uriNames = newNames;
@@ -1483,7 +1514,7 @@ app.post('/api/templates', authMiddleware, (req, res) => {
     // Auto-sync immediately if syncUrl provided
     if (template.syncUrl) {
         syncTemplate(template).then(changed => {
-            if (changed) { const d = loadData(); const t = d.templates.find(x => x.id === template.id); if (t) { t.uris = template.uris; t.lastSynced = template.lastSynced; saveData(d); scheduleRelaySync(); } }
+            if (changed) { const d = loadData(); const t = d.templates.find(x => x.id === template.id); if (t) { t.uris = template.uris; t.uriNames = template.uriNames; t.uriDirect = template.uriDirect; t.lastSynced = template.lastSynced; saveData(d); scheduleRelaySync(); } }
         }).catch(() => { });
     }
 });
