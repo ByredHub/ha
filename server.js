@@ -1163,7 +1163,11 @@ async function createThreeDhDevice(settings, order, plan) {
     const server = pickThreeDhServer(settings, servers);
     const name = formatThreeDhDeviceName(settings.threeDhNameTemplate, order, plan, server);
     const deviceType = parseInt(settings.threeDhDeviceType) || 2;
-    const multipart = buildMultipart({ name, type: deviceType, location: server.id });
+    const createPage = await threeDhRequest('GET', '/vpn/create', null, jar);
+    const csrfToken = extractHiddenInput(createPage.body, 'csrf_token');
+    const fields = { name, type: deviceType, location: server.id, mode: parseInt(settings.threeDhMode) || 7 };
+    if (csrfToken) fields.csrf_token = csrfToken;
+    const multipart = buildMultipart(fields);
 
     const createResp = await threeDhRequest('POST', '/vpn/create', multipart.body, jar, {
         'Content-Type': `multipart/form-data; boundary=${multipart.boundary}`,
@@ -1171,7 +1175,10 @@ async function createThreeDhDevice(settings, order, plan) {
         Referer: 'https://ru.3dh.live/vpn/create'
     });
 
-    if (createResp.statusCode >= 400) throw new Error(`3DH create device HTTP ${createResp.statusCode}`);
+    if (createResp.statusCode >= 400) {
+        const details = String(createResp.body || '').replace(/\s+/g, ' ').slice(0, 240);
+        throw new Error(`3DH create device HTTP ${createResp.statusCode}${details ? `: ${details}` : ''}`);
+    }
     const contentType = createResp.headers['content-type'] || '';
     if (contentType.includes('application/json')) {
         const result = parseThreeDhJson(createResp, '3DH create device returned invalid JSON');
