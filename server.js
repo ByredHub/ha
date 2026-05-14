@@ -721,6 +721,7 @@ function getDefaultSettings() {
         stubDeviceLimit: 'Лимит устройств исчерпан', stubNotFound: 'Подписка не найдена', stubNoToken: 'Токен не указан',
         paymentMethod: '', paymentInfo: '', paymentMethods: [],
         yookassaEnabled: false, yookassaShopId: '', yookassaSecretKey: '', yookassaDescription: 'Оплата картой или СБП через YooKassa',
+        plategaEnabled: false, plategaMerchantId: '', plategaSecretKey: '', plategaPaymentMethod: 11, plategaDescription: 'Оплата картой или СБП через Platega',
         notifySuspiciousIp: true
     };
 }
@@ -756,6 +757,16 @@ function isYooKassaConfigured(s = {}) {
     return !!(s.yookassaEnabled && s.yookassaShopId && s.yookassaSecretKey);
 }
 
+function isPlategaConfigured(s = {}) {
+    return !!(s.plategaEnabled && s.plategaMerchantId && s.plategaSecretKey);
+}
+
+function secureCompare(a = '', b = '') {
+    const left = Buffer.from(String(a));
+    const right = Buffer.from(String(b));
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
 function yookassaRequest(settings, method, apiPath, body = null, idempotenceKey = '') {
     return new Promise((resolve, reject) => {
         const payload = body ? JSON.stringify(body) : '';
@@ -789,6 +800,45 @@ function yookassaRequest(settings, method, apiPath, body = null, idempotenceKey 
             });
         });
         req.on('timeout', () => req.destroy(new Error('YooKassa request timeout')));
+        req.on('error', reject);
+        if (payload) req.write(payload);
+        req.end();
+    });
+}
+
+function plategaRequest(settings, method, apiPath, body = null) {
+    return new Promise((resolve, reject) => {
+        const payload = body ? JSON.stringify(body) : '';
+        const headers = {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-MerchantId': settings.plategaMerchantId,
+            'X-Secret': settings.plategaSecretKey
+        };
+        if (payload) headers['Content-Length'] = Buffer.byteLength(payload);
+
+        const req = https.request({
+            hostname: 'app.platega.io',
+            path: apiPath,
+            method,
+            headers,
+            timeout: 15000
+        }, resp => {
+            let raw = '';
+            resp.setEncoding('utf8');
+            resp.on('data', chunk => raw += chunk);
+            resp.on('end', () => {
+                let parsed = {};
+                try { parsed = raw ? JSON.parse(raw) : {}; } catch { parsed = { raw }; }
+                if (resp.statusCode >= 200 && resp.statusCode < 300) return resolve(parsed);
+                const message = parsed.description || parsed.message || parsed.error || `Platega HTTP ${resp.statusCode}`;
+                const err = new Error(message);
+                err.response = parsed;
+                err.statusCode = resp.statusCode;
+                reject(err);
+            });
+        });
+        req.on('timeout', () => req.destroy(new Error('Platega request timeout')));
         req.on('error', reject);
         if (payload) req.write(payload);
         req.end();
@@ -1897,8 +1947,8 @@ app.put('/api/orders/:id', authMiddleware, (req, res) => {
     const { status } = req.body;
     try {
         if (status === 'completed') {
-            if (data.orders[idx].paymentProvider === 'yookassa') {
-                return res.status(400).json({ error: 'YooKassa orders are confirmed automatically' });
+            if (['yookassa', 'platega'].includes(data.orders[idx].paymentProvider)) {
+                return res.status(400).json({ error: 'Gateway orders are confirmed automatically' });
             }
             activateOrder(data, data.orders[idx], { source: 'Ручное подтверждение', baseUrl: makePublicUrl(req, data) });
         } else if (status !== undefined) {
@@ -1936,6 +1986,8 @@ app.get('/api/shop/settings', (req, res) => {
         paymentMethods: normalizePaymentMethods(s).filter(m => m.enabled),
         yookassaEnabled: isYooKassaConfigured(s),
         yookassaDescription: s.yookassaDescription || 'Оплата картой или СБП через YooKassa',
+        plategaEnabled: isPlategaConfigured(s),
+        plategaDescription: s.plategaDescription || 'Оплата картой или СБП через Platega',
         userBotWelcome: s.userBotWelcome || '',
         shopWelcomeShort: s.shopWelcomeShort || '',
         supportUrl: s.supportUrl || '',
@@ -2206,6 +2258,162 @@ app.post('/api/payments/yookassa/webhook', async (req, res) => {
         res.json({ ok: true });
     } catch (e) {
         console.log('YooKassa webhook error:', e.message);
+        res.status(200).json({ ok: false });
+    }
+});
+
+function getPlategaAmount(payment) {
+    if (payment.paymentDetails && payment.paymentDetails.amount !== undefined) return payment.paymentDetails.amount;
+    if (payment.amount !== undefined) return payment.amount;
+    return null;
+}
+
+function applyPlategaPaymentResult(data, order, payment, baseUrl) {
+    if (!order) throw new Error('Order not found');
+    order.plategaStatus = payment.status || order.plategaStatus || '';
+    order.updatedAt = Date.now();
+
+    const expected = Number(order.price || 0).toFixed(2);
+    const actualAmount = getPlategaAmount(payment);
+    const actual = actualAmount !== null && actualAmount !== undefined ? Number(actualAmount).toFixed(2) : '';
+
+    if (payment.status === 'CONFIRMED') {
+        if (actual !== expected) throw new Error(`Payment amount mismatch: expected ${expected}, got ${actual}`);
+        return activateOrder(data, order, { source: 'Platega', baseUrl });
+    }
+
+    if (payment.status === 'CANCELED') {
+        order.status = 'canceled';
+        order.canceledAt = Date.now();
+    }
+    if (payment.status === 'CHARGEBACKED') {
+        order.status = 'failed';
+        order.failedAt = Date.now();
+    }
+    return { order };
+}
+
+app.post('/api/shop/platega/create-payment', async (req, res) => {
+    try {
+        const { planId, userId, username, firstName } = req.body;
+        if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
+
+        const data = loadData();
+        const settings = data.settings || {};
+        if (!isPlategaConfigured(settings)) return res.status(400).json({ error: 'Platega is not configured' });
+
+        const plan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
+        if (!plan) return res.status(404).json({ error: 'Plan not found' });
+        if (!plan.price || plan.price <= 0) return res.status(400).json({ error: 'Invalid plan price' });
+
+        const order = {
+            id: generateId(),
+            planId: plan.id,
+            planName: plan.name,
+            price: Number(plan.price),
+            userId: parseInt(userId),
+            chatId: parseInt(userId),
+            username: username || '',
+            firstName: firstName || '',
+            paymentProvider: 'platega',
+            paymentMethod: 'Platega',
+            status: 'awaiting_payment',
+            createdAt: Date.now()
+        };
+
+        const baseUrl = makePublicUrl(req, data);
+        const payload = JSON.stringify({ orderId: order.id, userId: String(userId), planId: plan.id });
+        const payment = await plategaRequest(settings, 'POST', '/transaction/process', {
+            paymentMethod: parseInt(settings.plategaPaymentMethod) || 11,
+            paymentDetails: {
+                amount: Number(plan.price),
+                currency: 'RUB'
+            },
+            description: `HappVPN ${plan.name} UserId:${parseInt(userId)}`,
+            return: `${baseUrl}/shop.html?order=${order.id}`,
+            failedUrl: `${baseUrl}/shop.html?order=${order.id}&failed=1`,
+            payload
+        });
+
+        order.plategaTransactionId = payment.transactionId;
+        order.plategaStatus = payment.status || '';
+        order.confirmationUrl = payment.redirect || '';
+
+        if (!order.plategaTransactionId || !order.confirmationUrl) {
+            throw new Error('Platega did not return payment link');
+        }
+
+        if (!data.orders) data.orders = [];
+        data.orders.push(order);
+        if (data.orders.length > 500) data.orders = data.orders.slice(-500);
+        saveData(data);
+
+        res.json({
+            ok: true,
+            orderId: order.id,
+            paymentId: order.plategaTransactionId,
+            confirmationUrl: order.confirmationUrl,
+            status: order.status
+        });
+    } catch (e) {
+        console.log('Platega create payment error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/shop/platega/check-payment', async (req, res) => {
+    try {
+        const { orderId, userId } = req.body;
+        if (!orderId || !userId) return res.status(400).json({ error: 'Missing data' });
+        const data = loadData();
+        const order = (data.orders || []).find(o => o.id === orderId && o.userId === parseInt(userId));
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+        if (!order.plategaTransactionId) return res.status(400).json({ error: 'No Platega payment for this order' });
+
+        const settings = data.settings || {};
+        if (!isPlategaConfigured(settings)) return res.status(400).json({ error: 'Platega is not configured' });
+
+        const payment = await plategaRequest(settings, 'GET', `/transaction/${encodeURIComponent(order.plategaTransactionId)}`);
+        const result = applyPlategaPaymentResult(data, order, payment, makePublicUrl(req, data));
+        saveData(data);
+
+        res.json({
+            ok: true,
+            status: order.status,
+            plategaStatus: order.plategaStatus,
+            subUrl: result.subUrl || ''
+        });
+    } catch (e) {
+        console.log('Platega check payment error:', e.message);
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/payments/platega/webhook', async (req, res) => {
+    try {
+        const event = req.body || {};
+        const transactionId = event.id;
+        if (!transactionId) return res.json({ ok: true });
+
+        const data = loadData();
+        const settings = data.settings || {};
+        if (!isPlategaConfigured(settings)) return res.json({ ok: true });
+
+        const headerMerchant = req.headers['x-merchantid'] || '';
+        const headerSecret = req.headers['x-secret'] || '';
+        if (!secureCompare(headerMerchant, settings.plategaMerchantId) || !secureCompare(headerSecret, settings.plategaSecretKey)) {
+            return res.status(401).json({ ok: false });
+        }
+
+        const order = (data.orders || []).find(o => o.plategaTransactionId === transactionId);
+        if (!order) return res.json({ ok: true });
+
+        const payment = await plategaRequest(settings, 'GET', `/transaction/${encodeURIComponent(transactionId)}`);
+        applyPlategaPaymentResult(data, order, payment, makePublicUrl(null, data));
+        saveData(data);
+        res.json({ ok: true });
+    } catch (e) {
+        console.log('Platega webhook error:', e.message);
         res.status(200).json({ ok: false });
     }
 });

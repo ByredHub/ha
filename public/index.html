@@ -625,6 +625,35 @@
                                 <div class="readonly-url" id="yookassaWebhookUrl">https://your-domain/api/payments/yookassa/webhook</div>
                             </div>
                         </div>
+                        <div class="settings-subcard">
+                            <div class="toggle-row">
+                                <h4>Platega — платежная ссылка</h4>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="settingPlategaEnabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group"><label for="settingPlategaMerchantId">ID мерчанта</label><input
+                                    type="text" id="settingPlategaMerchantId" placeholder="UUID мерчанта"
+                                    class="form-input"></div>
+                            <div class="form-group"><label for="settingPlategaSecretKey">API ключ <span
+                                        class="label-hint">(оставь пустым, чтобы не менять)</span></label><input
+                                    type="password" id="settingPlategaSecretKey" placeholder="API key"
+                                    class="form-input"></div>
+                            <div class="form-group"><label for="settingPlategaPaymentMethod">Метод оплаты</label><select
+                                    id="settingPlategaPaymentMethod" class="form-input">
+                                    <option value="11">Карточный эквайринг</option>
+                                    <option value="2">СБП QR</option>
+                                    <option value="12">Международная оплата</option>
+                                    <option value="13">Криптовалюта</option>
+                                </select></div>
+                            <div class="form-group"><label for="settingPlategaDescription">Описание для покупателя</label><input
+                                    type="text" id="settingPlategaDescription"
+                                    placeholder="Оплата картой или СБП через Platega" class="form-input"></div>
+                            <div class="form-group"><label>Callback URL для Platega</label>
+                                <div class="readonly-url" id="plategaWebhookUrl">https://your-domain/api/payments/platega/webhook</div>
+                            </div>
+                        </div>
                         <div class="form-group"><label for="settingUserBotWelcome">Приветственное
                                 сообщение</label><textarea id="settingUserBotWelcome"
                                 placeholder="Добро пожаловать! Здесь вы можете приобрести VPN подписку."

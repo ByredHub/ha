@@ -408,7 +408,7 @@ function setupUserBotHandlers(bot) {
         const userId = msg.from.id;
         const data = loadData();
         const pendingOrder = (data.orders || []).reverse().find(o =>
-            o.userId === userId && o.paymentProvider !== 'yookassa' && (o.status === 'awaiting_payment' || o.status === 'pending_review')
+            o.userId === userId && !['yookassa', 'platega'].includes(o.paymentProvider) && (o.status === 'awaiting_payment' || o.status === 'pending_review')
         );
 
         if (!pendingOrder) return;
@@ -589,7 +589,7 @@ async function approveOrder(bot, chatId, msgId, orderId, query) {
     const data = loadData();
     const order = (data.orders || []).find(o => o.id === orderId);
     if (!order) return bot.answerCallbackQuery(query.id, { text: '❌ Не найден' });
-    if (order.paymentProvider === 'yookassa') return bot.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
+    if (['yookassa', 'platega'].includes(order.paymentProvider)) return bot.answerCallbackQuery(query.id, { text: '💳 Платеж проверяется автоматически' });
     if (order.status === 'completed') return bot.answerCallbackQuery(query.id, { text: '✅ Уже выполнен' });
 
     const plan = (data.plans || []).find(p => p.id === order.planId);
@@ -629,7 +629,7 @@ async function rejectOrder(bot, chatId, msgId, orderId, query) {
     const data = loadData();
     const order = (data.orders || []).find(o => o.id === orderId);
     if (!order) return bot.answerCallbackQuery(query.id, { text: '❌ Не найден' });
-    if (order.paymentProvider === 'yookassa') return bot.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
+    if (['yookassa', 'platega'].includes(order.paymentProvider)) return bot.answerCallbackQuery(query.id, { text: '💳 Платеж проверяется автоматически' });
 
     order.status = 'rejected';
     order.rejectedAt = Date.now();

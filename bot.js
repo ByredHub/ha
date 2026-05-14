@@ -739,7 +739,7 @@ function setupBotHandlers(botInstance) {
             const data = loadData();
             const order = (data.orders || []).find(o => o.id === orderId);
             if (!order) return botInstance.answerCallbackQuery(query.id, { text: '❌ Не найден' });
-            if (order.paymentProvider === 'yookassa') return botInstance.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
+            if (['yookassa', 'platega'].includes(order.paymentProvider)) return botInstance.answerCallbackQuery(query.id, { text: '💳 Платеж проверяется автоматически' });
             if (order.status === 'completed') return botInstance.answerCallbackQuery(query.id, { text: '✅ Уже выполнен' });
             const plan = (data.plans || []).find(p => p.id === order.planId);
             if (!plan) return botInstance.answerCallbackQuery(query.id, { text: '❌ Тариф не найден' });
@@ -759,7 +759,7 @@ function setupBotHandlers(botInstance) {
             const data = loadData();
             const order = (data.orders || []).find(o => o.id === orderId);
             if (!order) return botInstance.answerCallbackQuery(query.id, { text: '❌ Не найден' });
-            if (order.paymentProvider === 'yookassa') return botInstance.answerCallbackQuery(query.id, { text: '💳 YooKassa проверяется автоматически' });
+            if (['yookassa', 'platega'].includes(order.paymentProvider)) return botInstance.answerCallbackQuery(query.id, { text: '💳 Платеж проверяется автоматически' });
             order.status = 'rejected'; order.rejectedAt = Date.now(); saveData(data);
             botInstance.editMessageText(`❌ Отклонён: ${order.planName} | ${order.firstName || ''} @${order.username || ''}`, { chat_id: chatId, message_id: msgId });
             if (global.happUserBot) {

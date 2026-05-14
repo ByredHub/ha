@@ -817,6 +817,18 @@
             const base = (settings.serverUrl || window.location.origin).replace(/\/+$/, '');
             $('#yookassaWebhookUrl').textContent = `${base}/api/payments/yookassa/webhook`;
         }
+        if ($('#settingPlategaEnabled')) $('#settingPlategaEnabled').checked = !!settings.plategaEnabled;
+        if ($('#settingPlategaMerchantId')) $('#settingPlategaMerchantId').value = settings.plategaMerchantId || '';
+        if ($('#settingPlategaSecretKey')) {
+            $('#settingPlategaSecretKey').value = '';
+            $('#settingPlategaSecretKey').placeholder = settings.plategaSecretKey ? 'Сохранён, введи новый для замены' : 'API key';
+        }
+        if ($('#settingPlategaPaymentMethod')) $('#settingPlategaPaymentMethod').value = String(settings.plategaPaymentMethod || 11);
+        if ($('#settingPlategaDescription')) $('#settingPlategaDescription').value = settings.plategaDescription || '';
+        if ($('#plategaWebhookUrl')) {
+            const base = (settings.serverUrl || window.location.origin).replace(/\/+$/, '');
+            $('#plategaWebhookUrl').textContent = `${base}/api/payments/platega/webhook`;
+        }
         if ($('#settingUserBotWelcome')) $('#settingUserBotWelcome').value = settings.userBotWelcome || '';
         if ($('#settingShopWelcomeShort')) $('#settingShopWelcomeShort').value = settings.shopWelcomeShort || '';
         if ($('#settingUserBotLink')) $('#settingUserBotLink').value = settings.userBotLink || '';
@@ -865,6 +877,10 @@
             yookassaEnabled: $('#settingYooKassaEnabled') ? $('#settingYooKassaEnabled').checked : false,
             yookassaShopId: $('#settingYooKassaShopId') ? $('#settingYooKassaShopId').value.trim() : '',
             yookassaDescription: $('#settingYooKassaDescription') ? $('#settingYooKassaDescription').value.trim() : '',
+            plategaEnabled: $('#settingPlategaEnabled') ? $('#settingPlategaEnabled').checked : false,
+            plategaMerchantId: $('#settingPlategaMerchantId') ? $('#settingPlategaMerchantId').value.trim() : '',
+            plategaPaymentMethod: $('#settingPlategaPaymentMethod') ? parseInt($('#settingPlategaPaymentMethod').value) || 11 : 11,
+            plategaDescription: $('#settingPlategaDescription') ? $('#settingPlategaDescription').value.trim() : '',
             userBotWelcome: $('#settingUserBotWelcome') ? $('#settingUserBotWelcome').value.trim() : '',
             shopWelcomeShort: $('#settingShopWelcomeShort') ? $('#settingShopWelcomeShort').value.trim() : '',
             userBotLink: $('#settingUserBotLink') ? $('#settingUserBotLink').value.trim() : '',
@@ -873,6 +889,8 @@
         };
         const yookassaSecret = $('#settingYooKassaSecretKey') ? $('#settingYooKassaSecretKey').value.trim() : '';
         if (yookassaSecret) body.yookassaSecretKey = yookassaSecret;
+        const plategaSecret = $('#settingPlategaSecretKey') ? $('#settingPlategaSecretKey').value.trim() : '';
+        if (plategaSecret) body.plategaSecretKey = plategaSecret;
         const pw = $('#settingPassword').value;
         if (pw) body.adminPassword = pw;
         try { settings = await api('POST', '/api/settings', body); showToast('Сохранено', 'success'); $('#settingPassword').value = ''; }
@@ -1002,7 +1020,7 @@
                 return;
             }
             list.innerHTML = orders.slice(0, 50).map(o => {
-                const statusMap = { awaiting_payment: '💳 Ожид. оплаты', pending_review: '⏳ На проверке', completed: '✅ Выполнен', rejected: '❌ Отклонён', canceled: '🚫 Отменён', cancelled: '🚫 Отменён' };
+                const statusMap = { awaiting_payment: '💳 Ожид. оплаты', pending_review: '⏳ На проверке', completed: '✅ Выполнен', rejected: '❌ Отклонён', canceled: '🚫 Отменён', cancelled: '🚫 Отменён', failed: '⚠️ Ошибка' };
                 const st = statusMap[o.status] || o.status;
                 const date = new Date(o.createdAt).toLocaleString('ru-RU');
                 return `<div class="log-item" style="margin-bottom:8px">
@@ -1690,7 +1708,7 @@
                 return;
             }
             const cur = settings.currency || '₽';
-            const statusMap = { awaiting_payment: '💳', pending_review: '⏳', completed: '✅', rejected: '❌', canceled: '🚫', cancelled: '🚫' };
+            const statusMap = { awaiting_payment: '💳', pending_review: '⏳', completed: '✅', rejected: '❌', canceled: '🚫', cancelled: '🚫', failed: '⚠️' };
             $('#userOrdersList').innerHTML = userOrders.map(o => {
                 const icon = statusMap[o.status] || '❓';
                 const date = new Date(o.createdAt).toLocaleDateString('ru-RU');
