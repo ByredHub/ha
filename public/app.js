@@ -777,6 +777,7 @@
         $('#settingTitle').value = settings.title || ''; $('#settingDesc').value = settings.description || '';
         $('#settingSupportUrl').value = settings.supportUrl || ''; $('#settingWebsite').value = settings.website || '';
         $('#settingUpdateInterval').value = settings.updateInterval || 12;
+        if ($('#settingVlessNameTemplate')) $('#settingVlessNameTemplate').value = settings.vlessNameTemplate || '{server}';
         $('#settingServerUrl').value = settings.serverUrl || ''; $('#settingBotLink').value = settings.botDeepLink || '';
         $('#settingRelayDomain').value = settings.relayDomain || '';
         $('#settingRelayMainPort').value = settings.relayMainPort || '';
@@ -852,6 +853,7 @@
             title: $('#settingTitle').value.trim(), description: $('#settingDesc').value.trim(),
             supportUrl: $('#settingSupportUrl').value.trim(), website: $('#settingWebsite').value.trim(),
             updateInterval: parseInt($('#settingUpdateInterval').value) || 12,
+            vlessNameTemplate: $('#settingVlessNameTemplate') ? $('#settingVlessNameTemplate').value.trim() || '{server}' : '{server}',
             serverUrl: $('#settingServerUrl').value.trim(), botDeepLink: $('#settingBotLink').value.trim(),
             relayDomain: $('#settingRelayEnabled').checked ? $('#settingRelayDomain').value.trim() : '',
             relayMainPort: $('#settingRelayMainPort').value.trim(),

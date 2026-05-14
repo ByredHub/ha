@@ -222,6 +222,42 @@ function parseVlessUri(uri) {
     } catch { return null; }
 }
 
+function getVlessUriName(uri, fallback = 'Server') {
+    if (!uri) return fallback;
+    const h = uri.lastIndexOf('#');
+    if (h === -1) {
+        const parsed = parseVlessUri(uri);
+        return parsed?.address || fallback;
+    }
+    try { return decodeURIComponent(uri.substring(h + 1)) || fallback; }
+    catch { return uri.substring(h + 1) || fallback; }
+}
+
+function setVlessUriName(uri, name) {
+    const h = uri.lastIndexOf('#');
+    const base = h > -1 ? uri.substring(0, h) : uri;
+    return `${base}#${encodeURIComponent(String(name || 'Server').slice(0, 120))}`;
+}
+
+function formatVlessName(settings = {}, context = {}) {
+    const template = String(settings.vlessNameTemplate || '{server}').trim() || '{server}';
+    const values = {
+        server: context.server || context.host || 'Server',
+        template: context.template || '',
+        index: context.index || '',
+        mode: context.mode || '',
+        host: context.host || '',
+        port: context.port || '',
+        domain: context.domain || settings.relayDomain || '',
+        sub: context.sub || ''
+    };
+    const result = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
+        const value = values[key] !== undefined ? values[key] : '';
+        return String(value);
+    }).replace(/\s+/g, ' ').trim();
+    return (result || values.server || 'Server').slice(0, 120);
+}
+
 function buildStream(p) {
     const s = { network: p.type };
     if (p.security === 'tls') { s.security = 'tls'; s.tlsSettings = { serverName: p.sni || p.address, fingerprint: p.fp || 'chrome', alpn: p.alpn ? p.alpn.split(',') : ['h2', 'http/1.1'] }; }
@@ -748,6 +784,7 @@ setTimeout(checkExpiredSubscriptions, 15000);
 function getDefaultSettings() {
     return {
         title: 'HappVPN', supportUrl: '', website: '', updateInterval: 12, serverUrl: '', adminPassword: '', botDeepLink: '',
+        vlessNameTemplate: '{server}',
         stubTitle: '⛔ Доступ ограничен', stubDisabled: 'Подписка деактивирована', stubExpired: 'Подписка истекла',
         stubDeviceLimit: 'Лимит устройств исчерпан', stubNotFound: 'Подписка не найдена', stubNoToken: 'Токен не указан',
         paymentMethod: '', paymentInfo: '', paymentMethods: [],
@@ -1238,7 +1275,16 @@ app.get('/sub', (req, res) => {
 
         // Direct VPN through relay (with Reality — invisible to DPI)
         const mainFp = getFingerprint(sub.token + ':main');
-        allUris.push(`vless://${directUuid}@${settings.relayDomain}:${mainPort}?security=reality&sni=${realitySni}&fp=${mainFp}&pbk=${realityPbk}&sid=${realitySid}&type=tcp&flow=xtls-rprx-vision&encryption=none#🛡 ${settings.relayDomain}`);
+        const mainName = formatVlessName(settings, {
+            server: settings.relayDomain,
+            template: settings.title || 'HappVPN',
+            index: 1,
+            mode: 'main',
+            host: settings.relayDomain,
+            port: mainPort,
+            sub: sub.name || ''
+        });
+        allUris.push(`vless://${directUuid}@${settings.relayDomain}:${mainPort}?security=reality&sni=${realitySni}&fp=${mainFp}&pbk=${realityPbk}&sid=${realitySid}&type=tcp&flow=xtls-rprx-vision&encryption=none#${encodeURIComponent(mainName)}`);
 
         // Relay servers — ВСЕ через один порт ${mainPort}, разные UUID
         let relayIdx = 0;
@@ -1248,24 +1294,29 @@ app.get('/sub', (req, res) => {
             for (let ui = 0; ui < (tpl.uris || []).length; ui++) {
                 const uri = tpl.uris[ui];
                 // Determine display name
-                let name = 'Server';
+                let serverName = 'Server';
                 if (customNames[ui]) {
-                    name = customNames[ui];
+                    serverName = customNames[ui];
                 } else {
-                    const h = uri.lastIndexOf('#');
-                    if (h !== -1) try { name = decodeURIComponent(uri.substring(h + 1)); } catch { }
+                    serverName = getVlessUriName(uri, serverName);
                 }
+                const parsed = parseVlessUri(uri);
+                const name = formatVlessName(settings, {
+                    server: serverName,
+                    template: tpl.name,
+                    index: relayIdx + 1,
+                    mode: directs[ui] ? 'direct' : 'relay',
+                    host: parsed?.address || '',
+                    port: parsed?.port || '',
+                    sub: sub.name || ''
+                });
                 if (directs[ui]) {
                     // Direct mode — pass original URI
                     let finalUri = uri;
                     if (finalUri.includes('{uuid}')) {
                         finalUri = finalUri.replace(/\{uuid\}/g, generateUuidFromSeed(sub.token + ':' + tpl.id));
                     }
-                    if (customNames[ui]) {
-                        const h = finalUri.lastIndexOf('#');
-                        finalUri = (h > -1 ? finalUri.substring(0, h) : finalUri) + '#' + encodeURIComponent(name);
-                    }
-                    allUris.push(finalUri);
+                    allUris.push(setVlessUriName(finalUri, name));
                 } else {
                     // Relay mode — ОДИН порт, разные UUID (БЕЗ flow — избегаем двойной Vision)
                     const relayUuid = makeUuid(sub.token + ':relay:' + relayIdx);
@@ -1284,12 +1335,18 @@ app.get('/sub', (req, res) => {
                 if (finalUri.includes('{uuid}')) {
                     finalUri = finalUri.replace(/\{uuid\}/g, generateUuidFromSeed(sub.token + ':' + tpl.id));
                 }
-                // Apply custom name if set
-                if (customNames[ui]) {
-                    const h = finalUri.lastIndexOf('#');
-                    finalUri = (h > -1 ? finalUri.substring(0, h) : finalUri) + '#' + encodeURIComponent(customNames[ui]);
-                }
-                allUris.push(finalUri);
+                const parsed = parseVlessUri(finalUri);
+                const serverName = customNames[ui] || getVlessUriName(finalUri, `${tpl.name} ${ui + 1}`);
+                const name = formatVlessName(settings, {
+                    server: serverName,
+                    template: tpl.name,
+                    index: ui + 1,
+                    mode: 'direct',
+                    host: parsed?.address || '',
+                    port: parsed?.port || '',
+                    sub: sub.name || ''
+                });
+                allUris.push(setVlessUriName(finalUri, name));
             }
         }
     }
