@@ -711,6 +711,22 @@
                                     class="label-hint">(для рефералов, например:
                                     https://t.me/YourShopBot)</span></label><input type="text" id="settingUserBotLink"
                                 placeholder="https://t.me/HappVPN_bot" class="form-input"></div>
+                        <div class="settings-subcard">
+                            <div class="toggle-row">
+                                <h4>Обязательная подписка на ТГК</h4>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="settingRequiredChannelsEnabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group"><label for="settingRequiredChannels">Каналы <span
+                                        class="label-hint">(по одному в строке)</span></label><textarea
+                                    id="settingRequiredChannels"
+                                    placeholder="@channel&#10;@second_channel | Второй канал&#10;-1001234567890 | Закрытый канал | https://t.me/+invite"
+                                    class="form-input form-textarea" rows="4"></textarea>
+                                <p class="hint">Бота нужно добавить админом в канал. Формат: @channel или chatId | название | ссылка.</p>
+                            </div>
+                        </div>
                         <div class="form-group"><label for="settingReferralBonusDays">Бонус за реферала
                                 (дней)</label><input type="number" id="settingReferralBonusDays" placeholder="3" min="0"
                                 class="form-input" style="max-width:120px"></div>
@@ -1276,6 +1292,20 @@
                 <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px">
                     Сообщение будет отправлено всем незаблокированным пользователям через бота.
                 </p>
+                <div class="form-row">
+                    <div class="form-group"><label for="broadcastTarget">Кому отправить</label><select
+                            id="broadcastTarget" class="form-input">
+                            <option value="all">Все пользователи</option>
+                            <option value="active">Только с активной подпиской</option>
+                            <option value="inactive">Без активной подписки</option>
+                        </select></div>
+                    <div class="form-group"><label for="broadcastParseMode">Формат</label><select
+                            id="broadcastParseMode" class="form-input">
+                            <option value="">Обычный текст</option>
+                            <option value="HTML">HTML</option>
+                            <option value="Markdown">Markdown</option>
+                        </select></div>
+                </div>
                 <div class="form-group"><label for="broadcastText">Текст сообщения</label><textarea id="broadcastText"
                         placeholder="Введите текст рассылки..." class="form-input form-textarea" rows="5"></textarea>
                 </div>

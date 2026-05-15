@@ -33,6 +33,62 @@ function esc(text) {
     return String(text).replace(/[_*[\]()~`>#+=|{}.!\\-]/g, '\\$&');
 }
 
+function parseRequiredChannels(settings = {}) {
+    if (settings.requiredChannelsEnabled === false) return [];
+    const raw = settings.requiredChannels || '';
+    const lines = Array.isArray(raw) ? raw : String(raw).split(/\r?\n|,/);
+    return lines.map(line => {
+        const parts = String(line || '').split('|').map(p => p.trim()).filter(Boolean);
+        if (!parts[0]) return null;
+
+        let chat = parts[0];
+        let title = parts[1] || '';
+        let url = parts[2] || '';
+        const publicMatch = chat.match(/^https?:\/\/t\.me\/([A-Za-z0-9_]+)\/?$/i);
+        if (publicMatch) {
+            chat = `@${publicMatch[1]}`;
+            if (!url) url = parts[0];
+        }
+        if (!url && chat.startsWith('@')) url = `https://t.me/${chat.slice(1)}`;
+        if (!title) title = chat.startsWith('@') ? chat : 'Telegram канал';
+
+        return { chat, title, url };
+    }).filter(Boolean);
+}
+
+function isTelegramMember(member = {}) {
+    return ['creator', 'administrator', 'member'].includes(member.status) || (member.status === 'restricted' && member.is_member);
+}
+
+async function checkRequiredChannels(bot, userId, cfg = {}) {
+    const channels = parseRequiredChannels(cfg);
+    if (!channels.length) return { ok: true, channels, missing: [] };
+
+    const missing = [];
+    for (const channel of channels) {
+        try {
+            const member = await bot.getChatMember(channel.chat, userId);
+            if (!isTelegramMember(member)) missing.push(channel);
+        } catch {
+            missing.push(channel);
+        }
+    }
+    return { ok: missing.length === 0, channels, missing };
+}
+
+async function sendRequiredChannelsMessage(bot, chatId, cfg = {}) {
+    const channels = parseRequiredChannels(cfg);
+    const rows = channels
+        .filter(c => c.url)
+        .map(c => [{ text: `📢 ${c.title}`, url: c.url }]);
+    rows.push([{ text: '✅ Проверить подписку', callback_data: 'check_required_sub' }]);
+
+    return bot.sendMessage(chatId,
+        `🔒 *Доступ закрыт*\n\nПодпишитесь на обязательные каналы и нажмите *Проверить подписку*\\.`,
+        { parse_mode: 'MarkdownV2', reply_markup: { inline_keyboard: rows } }
+    );
+}
+
 function ensureShopUser(data, from) {
     if (!data.shopUsers) data.shopUsers = [];
     let user = data.shopUsers.find(u => u.userId === from.id);
@@ -224,12 +280,13 @@ function setupUserBotHandlers(bot) {
     };
 
     // /start
-    bot.onText(/\/start(.*)/, (msg, match) => {
+    bot.onText(/\/start(.*)/, async (msg, match) => {
         const chatId = msg.chat.id;
         const userId = msg.from.id;
         const param = (match[1] || '').trim();
         const cfg = getSettings();
-        const shopName = cfg.shopName || cfg.title || 'HappVPN';
+        const required = await checkRequiredChannels(bot, userId, cfg);
+        if (!required.ok) return sendRequiredChannelsMessage(bot, chatId, cfg);
 
         // Deep-link: привязка подписки
         if (param.startsWith('sub_')) {
@@ -320,14 +377,20 @@ function setupUserBotHandlers(bot) {
     });
 
     // /shop
-    bot.onText(/\/shop/, (msg) => {
+    bot.onText(/\/shop/, async (msg) => {
+        const cfg = getSettings();
+        const required = await checkRequiredChannels(bot, msg.from.id, cfg);
+        if (!required.ok) return sendRequiredChannelsMessage(bot, msg.chat.id, cfg);
         bot.sendMessage(msg.chat.id, '🛒 Нажмите кнопку, чтобы открыть магазин:', {
             reply_markup: { inline_keyboard: [[{ text: '🛒 Открыть магазин', web_app: { url: webAppUrl() } }]] }
         });
     });
 
     // /my — мои подписки
-    bot.onText(/\/my/, (msg) => {
+    bot.onText(/\/my/, async (msg) => {
+        const cfg = getSettings();
+        const required = await checkRequiredChannels(bot, msg.from.id, cfg);
+        if (!required.ok) return sendRequiredChannelsMessage(bot, msg.chat.id, cfg);
         const userId = msg.from.id;
         const data = loadData();
         const mySubs = (data.subscriptions || []).filter(s => s.telegramUsers && s.telegramUsers.includes(userId));
@@ -363,6 +426,10 @@ function setupUserBotHandlers(bot) {
             const payload = JSON.parse(msg.web_app_data.data);
 
             if (payload.action === 'create_order') {
+                const cfg = getSettings();
+                const required = await checkRequiredChannels(bot, userId, cfg);
+                if (!required.ok) return sendRequiredChannelsMessage(bot, chatId, cfg);
+
                 const data = loadData();
                 const plan = (data.plans || []).find(p => p.id === payload.planId);
                 if (!plan) return bot.sendMessage(chatId, '❌ Тариф не найден.');
@@ -385,8 +452,6 @@ function setupUserBotHandlers(bot) {
                 data.orders.push(order);
                 if (data.orders.length > 500) data.orders = data.orders.slice(-500);
                 saveData(data);
-
-                const cfg = getSettings();
 
                 bot.sendMessage(chatId,
                     `✅ *Заказ создан\\!*\n\n📦 Тариф: *${esc(plan.name)}*\n💰 Сумма: *${esc(String(plan.price))} ${esc(cfg.currency || '₽')}*\n\n⏳ Ожидайте подтверждения от администратора\\.`,
@@ -435,7 +500,28 @@ function setupUserBotHandlers(bot) {
         const userId = query.from.id;
         const cb = query.data;
 
+        if (cb === 'check_required_sub') {
+            const cfg = getSettings();
+            const required = await checkRequiredChannels(bot, userId, cfg);
+            if (!required.ok) {
+                await bot.answerCallbackQuery(query.id, { text: 'Подписка еще не найдена', show_alert: true });
+                return sendRequiredChannelsMessage(bot, chatId, cfg);
+            }
+            await bot.answerCallbackQuery(query.id, { text: '✅ Подписка проверена' });
+            const data = loadData();
+            ensureShopUser(data, query.from);
+            saveData(data);
+            const home = buildUserHome(data, query.from, webAppUrl());
+            return bot.sendMessage(chatId, home.text, { parse_mode: 'MarkdownV2', reply_markup: home.reply_markup });
+        }
+
         if (cb.startsWith('user:')) {
+            const cfg = getSettings();
+            const required = await checkRequiredChannels(bot, userId, cfg);
+            if (!required.ok) {
+                await bot.answerCallbackQuery(query.id, { text: 'Сначала подпишитесь на каналы', show_alert: true });
+                return sendRequiredChannelsMessage(bot, chatId, cfg);
+            }
             const screen = cb.split(':')[1] || 'home';
             if (screen === 'shop') {
                 await bot.sendMessage(chatId, '🛒 Откройте магазин:', {

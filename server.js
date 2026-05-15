@@ -831,6 +831,7 @@ function getDefaultSettings() {
         paymentMethod: '', paymentInfo: '', paymentMethods: [],
         yookassaEnabled: false, yookassaShopId: '', yookassaSecretKey: '', yookassaDescription: 'Оплата картой или СБП через YooKassa',
         plategaEnabled: false, plategaMerchantId: '', plategaSecretKey: '', plategaPaymentMethod: 11, plategaDescription: 'Оплата картой или СБП через Platega',
+        requiredChannelsEnabled: false, requiredChannels: '',
         threeDhEnabled: false, threeDhPin: '', threeDhMode: 7, threeDhDeviceType: 2, threeDhProtocol: 'vless', threeDhLocationId: '', threeDhNameTemplate: 'HappVPN-{userId}-{order}',
         notifySuspiciousIp: true
     };
@@ -873,6 +874,70 @@ function isPlategaConfigured(s = {}) {
 
 function isThreeDhConfigured(s = {}) {
     return !!(s.threeDhEnabled && s.threeDhPin);
+}
+
+function parseRequiredChannels(settings = {}) {
+    if (settings.requiredChannelsEnabled === false) return [];
+    const raw = settings.requiredChannels || '';
+    const lines = Array.isArray(raw) ? raw : String(raw).split(/\r?\n|,/);
+    return lines.map(line => {
+        const parts = String(line || '').split('|').map(p => p.trim()).filter(Boolean);
+        if (!parts[0]) return null;
+
+        let chat = parts[0];
+        let title = parts[1] || '';
+        let url = parts[2] || '';
+        const publicMatch = chat.match(/^https?:\/\/t\.me\/([A-Za-z0-9_]+)\/?$/i);
+        if (publicMatch) {
+            chat = `@${publicMatch[1]}`;
+            if (!url) url = parts[0];
+        }
+        if (!url && chat.startsWith('@')) url = `https://t.me/${chat.slice(1)}`;
+        if (!title) title = chat.startsWith('@') ? chat : 'Telegram канал';
+
+        return { chat, title, url };
+    }).filter(Boolean);
+}
+
+function publicRequiredChannels(settings = {}) {
+    return parseRequiredChannels(settings).map(c => ({ title: c.title, url: c.url, chat: c.chat }));
+}
+
+function isTelegramMember(member = {}) {
+    return ['creator', 'administrator', 'member'].includes(member.status) || (member.status === 'restricted' && member.is_member);
+}
+
+async function checkRequiredChannels(userId, settings = {}, bot = global.happUserBot) {
+    const channels = parseRequiredChannels(settings);
+    if (!channels.length) return { ok: true, missing: [], channels: [] };
+    if (!bot || !bot.getChatMember) return { ok: false, missing: channels, channels };
+
+    const missing = [];
+    for (const channel of channels) {
+        try {
+            const member = await bot.getChatMember(channel.chat, parseInt(userId));
+            if (!isTelegramMember(member)) missing.push(channel);
+        } catch {
+            missing.push(channel);
+        }
+    }
+
+    return { ok: missing.length === 0, missing, channels };
+}
+
+async function ensureRequiredChannelsForShop(req, res, userId, data = null) {
+    const current = data || loadData();
+    const result = await checkRequiredChannels(userId, current.settings || {});
+    if (result.ok) return true;
+    res.status(403).json({
+        ok: false,
+        error: 'subscribe_required',
+        requiredSubscription: {
+            required: true,
+            channels: publicRequiredChannels(current.settings || {})
+        }
+    });
+    return false;
 }
 
 function secureCompare(a = '', b = '') {
@@ -2597,6 +2662,8 @@ app.get('/api/shop/settings', (req, res) => {
         shopWelcomeShort: s.shopWelcomeShort || '',
         supportUrl: s.supportUrl || '',
         userBotLink: s.userBotLink || '',
+        requiredChannelsEnabled: !!s.requiredChannelsEnabled,
+        requiredChannels: publicRequiredChannels(s),
         referralBonusDays: parseInt(s.referralBonusDays) || 3,
         devicePrice: parseFloat(s.devicePrice) || 0
     });
@@ -2657,10 +2724,11 @@ app.get('/api/shop/my-orders', (req, res) => {
 });
 
 // Create order from Mini App
-app.post('/api/shop/create-order', (req, res) => {
+app.post('/api/shop/create-order', async (req, res) => {
     const { planId, userId, username, firstName, receipt, paymentMethod } = req.body;
     if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
     const data = loadData();
+    if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
     const plan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
     if (!plan) return res.status(404).json({ error: 'Plan not found' });
 
@@ -2757,6 +2825,7 @@ app.post('/api/shop/yookassa/create-payment', async (req, res) => {
         if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
 
         const data = loadData();
+        if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
         const settings = data.settings || {};
         if (!isYooKassaConfigured(settings)) return res.status(400).json({ error: 'YooKassa is not configured' });
 
@@ -2824,6 +2893,7 @@ app.post('/api/shop/yookassa/create-top-up', async (req, res) => {
         if (!userId || !topUpAmount || topUpAmount <= 0) return res.status(400).json({ error: 'Missing data' });
 
         const data = loadData();
+        if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
         const settings = data.settings || {};
         if (!isYooKassaConfigured(settings)) return res.status(400).json({ error: 'YooKassa is not configured' });
 
@@ -2972,6 +3042,7 @@ app.post('/api/shop/platega/create-payment', async (req, res) => {
         if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
 
         const data = loadData();
+        if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
         const settings = data.settings || {};
         if (!isPlategaConfigured(settings)) return res.status(400).json({ error: 'Platega is not configured' });
 
@@ -3041,6 +3112,7 @@ app.post('/api/shop/platega/create-top-up', async (req, res) => {
         if (!userId || !topUpAmount || topUpAmount <= 0) return res.status(400).json({ error: 'Missing data' });
 
         const data = loadData();
+        if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
         const settings = data.settings || {};
         if (!isPlategaConfigured(settings)) return res.status(400).json({ error: 'Platega is not configured' });
 
@@ -3162,6 +3234,7 @@ app.post('/api/shop/buy-with-balance', async (req, res) => {
         const { planId, userId } = req.body;
         if (!planId || !userId) return res.status(400).json({ error: 'Missing data' });
         const data = loadData();
+        if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
         const basePlan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
         if (!basePlan) return res.status(404).json({ error: 'Plan not found' });
         const plan = { ...basePlan, templateIds: mergeIds(basePlan.templateIds || []) };
@@ -3219,10 +3292,11 @@ app.post('/api/shop/buy-with-balance', async (req, res) => {
 });
 
 // Buy additional devices
-app.post('/api/shop/buy-device', (req, res) => {
+app.post('/api/shop/buy-device', async (req, res) => {
     const { userId, subId, qty } = req.body;
     if (!userId || !subId || !qty || qty < 1) return res.status(400).json({ error: 'Missing data' });
     const data = loadData();
+    if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
     const s = data.settings || {};
     const devicePrice = parseFloat(s.devicePrice) || 0;
     if (devicePrice <= 0) return res.status(400).json({ error: 'Device purchase disabled' });
@@ -3258,12 +3332,13 @@ app.post('/api/shop/buy-device', (req, res) => {
 });
 
 // Consolidated user data for Mini App home
-app.get('/api/shop/user-data', (req, res) => {
+app.get('/api/shop/user-data', async (req, res) => {
     const userId = parseInt(req.query.userId);
     if (!userId) return res.json({});
     const data = loadData();
     const s = data.settings || {};
     const serverUrl = getBaseUrl(req);
+    const required = await checkRequiredChannels(userId, s);
 
     // Find user profile
     if (!data.shopUsers) data.shopUsers = [];
@@ -3290,6 +3365,10 @@ app.get('/api/shop/user-data', (req, res) => {
     }
 
     res.json({
+        requiredSubscription: required.ok ? null : {
+            required: true,
+            channels: publicRequiredChannels(s)
+        },
         activeSub: subData,
         balance: user.balance || 0,
         referralCode: user.referralCode || '',
@@ -3301,10 +3380,11 @@ app.get('/api/shop/user-data', (req, res) => {
 });
 
 // Top-up request
-app.post('/api/shop/top-up', (req, res) => {
+app.post('/api/shop/top-up', async (req, res) => {
     const { userId, amount, firstName, paymentMethod } = req.body;
     if (!userId || !amount) return res.status(400).json({ error: 'Missing data' });
     const data = loadData();
+    if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
     if (!data.topUpRequests) data.topUpRequests = [];
     const request = { id: generateId(), userId: parseInt(userId), amount: parseInt(amount), firstName: firstName || '', paymentMethod: paymentMethod || '', status: 'pending', createdAt: Date.now() };
     data.topUpRequests.push(request);
@@ -3342,10 +3422,11 @@ app.get('/api/shop/my-tickets', (req, res) => {
 });
 
 // Create ticket
-app.post('/api/shop/create-ticket', (req, res) => {
+app.post('/api/shop/create-ticket', async (req, res) => {
     const { userId, subject, message, firstName, username } = req.body;
     if (!userId || !subject || !message) return res.status(400).json({ error: 'Missing data' });
     const data = loadData();
+    if (!(await ensureRequiredChannelsForShop(req, res, userId, data))) return;
     if (!data.tickets) data.tickets = [];
     const ticket = {
         id: generateId(), userId: parseInt(userId), chatId: parseInt(userId), username: username || '', firstName: firstName || '',
@@ -3559,20 +3640,35 @@ app.put('/api/shop-users/:id', authMiddleware, (req, res) => {
 
 // Broadcast message to all users
 app.post('/api/broadcast', authMiddleware, async (req, res) => {
-    const { message } = req.body;
+    const { message, target, parseMode } = req.body;
     if (!message) return res.status(400).json({ error: 'Missing message' });
     const data = loadData();
     const allUserIds = new Set();
-    (data.shopUsers || []).forEach(u => { if (!u.blocked) allUserIds.add(u.userId); });
-    (data.subscriptions || []).forEach(s => (s.telegramUsers || []).forEach(u => allUserIds.add(u)));
-    const recipients = [...allUserIds];
+    const blockedUserIds = new Set((data.shopUsers || []).filter(u => u.blocked).map(u => parseInt(u.userId)));
+    const activeUserIds = new Set();
+    (data.shopUsers || []).forEach(u => { if (!u.blocked) allUserIds.add(parseInt(u.userId)); });
+    (data.subscriptions || []).forEach(s => {
+        const isActive = s.enabled !== false && (!s.expiresAt || Date.now() < s.expiresAt);
+        (s.telegramUsers || []).forEach(u => {
+            const uid = parseInt(u);
+            if (!blockedUserIds.has(uid)) allUserIds.add(uid);
+            if (isActive && !blockedUserIds.has(uid)) activeUserIds.add(uid);
+        });
+    });
+    const recipients = [...allUserIds].filter(uid => {
+        if (target === 'active') return activeUserIds.has(uid);
+        if (target === 'inactive') return !activeUserIds.has(uid);
+        return true;
+    });
     if (recipients.length === 0) return res.json({ ok: true, sent: 0, failed: 0, total: 0 });
     const bot = global.happUserBot || global.happBot;
     if (!bot) return res.status(503).json({ error: 'No bot running' });
+    const opts = {};
+    if (['HTML', 'Markdown', 'MarkdownV2'].includes(parseMode)) opts.parse_mode = parseMode;
     let sent = 0, failed = 0;
     for (const uid of recipients) {
         try {
-            await bot.sendMessage(uid, message);
+            await bot.sendMessage(uid, message, opts);
             sent++;
         } catch { failed++; }
         await new Promise(r => setTimeout(r, 50));

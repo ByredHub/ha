@@ -844,6 +844,8 @@
         if ($('#settingUserBotWelcome')) $('#settingUserBotWelcome').value = settings.userBotWelcome || '';
         if ($('#settingShopWelcomeShort')) $('#settingShopWelcomeShort').value = settings.shopWelcomeShort || '';
         if ($('#settingUserBotLink')) $('#settingUserBotLink').value = settings.userBotLink || '';
+        if ($('#settingRequiredChannelsEnabled')) $('#settingRequiredChannelsEnabled').checked = !!settings.requiredChannelsEnabled;
+        if ($('#settingRequiredChannels')) $('#settingRequiredChannels').value = settings.requiredChannels || '';
         if ($('#settingReferralBonusDays')) $('#settingReferralBonusDays').value = settings.referralBonusDays || 3;
         if ($('#settingShopWelcome')) $('#settingShopWelcome').value = settings.shopWelcome || '';
         // Welcome photo preview
@@ -903,6 +905,8 @@
             userBotWelcome: $('#settingUserBotWelcome') ? $('#settingUserBotWelcome').value.trim() : '',
             shopWelcomeShort: $('#settingShopWelcomeShort') ? $('#settingShopWelcomeShort').value.trim() : '',
             userBotLink: $('#settingUserBotLink') ? $('#settingUserBotLink').value.trim() : '',
+            requiredChannelsEnabled: $('#settingRequiredChannelsEnabled') ? $('#settingRequiredChannelsEnabled').checked : false,
+            requiredChannels: $('#settingRequiredChannels') ? $('#settingRequiredChannels').value.trim() : '',
             referralBonusDays: $('#settingReferralBonusDays') ? parseInt($('#settingReferralBonusDays').value) || 3 : 3,
             shopWelcome: $('#settingShopWelcome') ? $('#settingShopWelcome').value.trim() : ''
         };
@@ -1798,10 +1802,12 @@
     async function handleBroadcast() {
         const msg = $('#broadcastText').value.trim();
         if (!msg) { showToast('Введите текст', 'error'); return; }
+        const target = $('#broadcastTarget') ? $('#broadcastTarget').value : 'all';
+        const parseMode = $('#broadcastParseMode') ? $('#broadcastParseMode').value : '';
         $('#btnSendBroadcast').disabled = true;
         $('#broadcastStatus').textContent = '✨ Отправка...';
         try {
-            const r = await api('POST', '/api/broadcast', { message: msg });
+            const r = await api('POST', '/api/broadcast', { message: msg, target, parseMode });
             $('#broadcastStatus').textContent = `✅ Готово! Доставлено: ${r.sent} | Ошибок: ${r.failed} | Всего: ${r.total}`;
             showToast(`📢 Доставлено: ${r.sent}/${r.total}`, 'success');
         } catch (e) {

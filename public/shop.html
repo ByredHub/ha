@@ -1150,7 +1150,7 @@
                 share: `<svg ${_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`,
             };
             async function api(u) { const r = await fetch(u); if (!r.ok) throw 0; return r.json() }
-            async function post(u, b) { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); return r.json() }
+            async function post(u, b) { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const d = await r.json().catch(() => ({})); if (d.error === 'subscribe_required') { ud.requiredSubscription = d.requiredSubscription; renderRequiredGate(); } return d }
             function toast(m) { const t = $('tst'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2500) }
             function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML }
             function fD(d) { if (!d || d <= 0) return '∞'; return { 1: '1 день', 7: '1 нед', 30: '1 мес', 60: '2 мес', 90: '3 мес', 180: '6 мес', 365: '1 год' }[d] || d + ' дн' }
@@ -1184,6 +1184,22 @@ ${m.methods ? `<div style="font-size:.72rem;color:var(--t3);margin-bottom:6px">$
 </div></div></label>`).join('');
             }
             function selectedPay() { return document.querySelector('input[name="payM"]:checked')?.value || (payMs()[0]?.name || '') }
+            function hasRequiredGate() { return !!(ud.requiredSubscription && ud.requiredSubscription.required) }
+            function renderRequiredGate() {
+                const channels = ud.requiredSubscription?.channels || cfg.requiredChannels || [];
+                const btns = channels.map(c => c.url ? `<a href="${esc(c.url)}" target="_blank" style="text-decoration:none"><button class="btn btn-p">${I.link} ${esc(c.title || c.chat || 'Канал')}</button></a>` : `<div class="cd" style="font-size:.84rem;color:var(--t2)">${esc(c.title || c.chat || 'Telegram канал')}</div>`).join('');
+                $('hC').innerHTML = `<div class="emp"><div class="emp-i">${I.shield}</div><div class="emp-t">Нужна подписка на канал</div><div class="emp-d">Подпишитесь на все каналы и нажмите проверку.</div></div>
+${btns || '<div class="cd" style="text-align:center;color:var(--t2)">Каналы не настроены</div>'}
+<button class="btn btn-g" id="reqCheck">${I.check} Проверить подписку</button>`;
+                const btn = $('reqCheck');
+                if (btn) btn.addEventListener('click', async () => { btn.disabled = true; btn.innerHTML = '⏳ Проверяем...'; await load(); });
+            }
+            function guardRequiredGate() {
+                if (!hasRequiredGate()) return false;
+                renderRequiredGate();
+                toast('Подпишитесь на каналы');
+                return true;
+            }
             $('mo').addEventListener('click', e => { if (e.target === $('mo')) cM() });
             let ty = 0; $('moS').addEventListener('touchstart', e => { ty = e.touches[0].clientY });
             $('moS').addEventListener('touchmove', e => { if (e.touches[0].clientY - ty > 50) cM() });
@@ -1191,7 +1207,7 @@ ${m.methods ? `<div style="font-size:.72rem;color:var(--t3);margin-bottom:6px">$
             async function load() {
                 try {
                     const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uid ? api('/api/shop/user-data?userId=' + uid) : {}]);
-                    cfg = s; plans = p; ud = u; $('hN').textContent = s.shopName || s.title || 'HappVPN'; $('hS').textContent = s.shopWelcomeShort || 'Быстрый и безопасный VPN'; rH()
+                    cfg = s; plans = p; ud = u; $('hN').textContent = s.shopName || s.title || 'HappVPN'; $('hS').textContent = s.shopWelcomeShort || 'Быстрый и безопасный VPN'; if (hasRequiredGate()) renderRequiredGate(); else rH()
                 }
                 catch { $('hC').innerHTML = '<div class="emp"><div class="emp-i">' + I.shield + '</div><div class="emp-t">Ошибка загрузки</div></div>' }
             }
@@ -1262,11 +1278,13 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
             }
 
             async function buyBal(p) {
+                if (guardRequiredGate()) return;
                 const b = $('bBuy'); b.disabled = true; b.innerHTML = '⏳ Покупка...';
                 try { const r = await post('/api/shop/buy-with-balance', { planId: p.id, userId: uid }); if (r.ok) { cM(); toast('✅ Подписка активирована!'); ud.balance = r.balance; setTimeout(() => load(), 500) } } catch { toast('❌ Ошибка'); b.disabled = false; b.innerHTML = I.check + ' Купить с баланса' }
             }
 
             async function payYooKassa(p) {
+                if (guardRequiredGate()) return;
                 const b = $('bYK'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
                 try {
                     const r = await post('/api/shop/yookassa/create-payment', { planId: p.id, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname });
@@ -1304,6 +1322,7 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
             }
 
             async function payPlatega(p) {
+                if (guardRequiredGate()) return;
                 const b = $('bPG'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
                 try {
                     const r = await post('/api/shop/platega/create-payment', { planId: p.id, userId: uid, username: tg?.initDataUnsafe?.user?.username || '', firstName: uname });
@@ -1341,6 +1360,7 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
             }
 
             async function mkOrd(p, paymentMethod) {
+                if (guardRequiredGate()) return;
                 oM(`<div class="mo-t">${I.check} Подтверждение оплаты</div>
 <div class="cd"><div class="cd-t">${I.wallet} ${esc(paymentMethod || 'Оплата')}</div><div style="font-size:.78rem;color:var(--t2)">Прикрепите чек по выбранному способу оплаты.</div></div>
 <div class="cd" style="text-align:center;padding:16px">
@@ -1389,6 +1409,7 @@ ${balanceBlock}${yookassaBlock}${plategaBlock}${manualBlock}
             }
 
             function showTU() {
+                if (guardRequiredGate()) return;
                 const cur = cfg.currency || '₽';
                 const yookassaBlock = cfg.yookassaEnabled ? `<div class="cd"><div class="cd-t">${I.wallet} YooKassa</div><div style="font-size:.84rem;color:var(--t2);line-height:1.6">${esc(cfg.yookassaDescription || 'Оплата картой или СБП через YooKassa')}</div></div>
 <button class="btn btn-p" id="tuYK">${I.wallet} Оплатить картой / СБП</button>` : '';
@@ -1415,6 +1436,7 @@ ${yookassaBlock}${plategaBlock}${manualBlock}<button class="btn btn-o" onclick="
             }
 
             async function payYooKassaTopUp() {
+                if (guardRequiredGate()) return;
                 const amount = topUpAmount(); if (amount <= 0) return;
                 const b = $('tuYK'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
                 try {
@@ -1438,6 +1460,7 @@ ${yookassaBlock}${plategaBlock}${manualBlock}<button class="btn btn-o" onclick="
             }
 
             async function payPlategaTopUp() {
+                if (guardRequiredGate()) return;
                 const amount = topUpAmount(); if (amount <= 0) return;
                 const b = $('tuPG'); b.disabled = true; b.innerHTML = '⏳ Создаем платеж...';
                 try {
@@ -1488,6 +1511,7 @@ ${rl ? `<button class="btn btn-p" onclick="cp('${esc(rl)}')">${I.copy} Скоп�
             }
 
             window.nTkt = () => {
+                if (guardRequiredGate()) return;
                 oM(`<div class="mo-t">${I.plus} Новое обращение</div><div class="ig"><div class="il">Тема</div><input class="inp" id="tS" placeholder="Проблема с подключением..."></div>
 <div class="ig"><div class="il">Сообщение</div><textarea class="inp" id="tM" rows="3" placeholder="Опишите проблему..."></textarea></div>
 <button class="btn btn-p" id="tB">${I.send} Отправить</button><button class="btn btn-o" onclick="cM()">Отмена</button>`);
@@ -1513,6 +1537,7 @@ ${t.status === 'open' ? `<div class="mg-iw"><textarea class="mg-in" id="cIn" row
             load();
             // DEVICE PURCHASE
             window.oDV = function () {
+                if (guardRequiredGate()) return;
                 const s = ud.activeSub; if (!s || !cfg.devicePrice) { toast('Недоступно'); return }
                 const cur = cfg.currency || '₽', bal = ud.balance || 0, pr = cfg.devicePrice, dv = (s.devices || []).length, mx = s.maxDevices || 0;
                 oM(`<div class="mo-t">${I.device} Докупить устройства</div>
@@ -1554,6 +1579,7 @@ ${t.status === 'open' ? `<div class="mg-iw"><textarea class="mg-in" id="cIn" row
                 try {
                     const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uid ? api('/api/shop/user-data?userId=' + uid) : {}]);
                     cfg = s; plans = p; ud = u;
+                    if (hasRequiredGate()) { renderRequiredGate(); return; }
                     // Re-render current active page
                     const active = document.querySelector('.pg.on');
                     if (active) {
