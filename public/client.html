@@ -708,6 +708,8 @@
                     💬 Поддержка
                 </a>` : '';
 
+                const devStr = data.maxDevices > 0 ? `${data.devices}/${data.maxDevices}` : `${data.devices}`;
+
                 document.getElementById('page').innerHTML = `
                 <div class="header">
                     <div class="header-shield">🛡</div>
@@ -725,9 +727,24 @@
                         <div class="stat-lbl">Серверов</div>
                     </div>
                     <div class="stat-box">
+                        <div class="stat-val">${devStr}</div>
+                        <div class="stat-lbl">Устройств</div>
+                    </div>
+                    <div class="stat-box">
                         <div class="stat-val">${data.accessCount}</div>
                         <div class="stat-lbl">Обращений</div>
                     </div>
+                </div>
+
+                <div class="card qr-card" style="margin-top:12px">
+                    <div class="card-title">📲 Добавить в Happ</div>
+                    <div class="qr-wrap" id="qrContainer"></div>
+                    <div class="qr-hint">Отсканируйте в приложении Happ</div>
+                    <div class="url-display" id="urlDisplay">${esc(data.subUrl)}</div>
+                    <button class="btn-copy" id="btnCopy" data-url="${esc(data.subUrl)}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        Скопировать ссылку
+                    </button>
                 </div>
 
                 ${expiryHtml}
@@ -776,6 +793,34 @@
                 </div>
             `;
 
+                // QR
+                try {
+                    const qr = qrcode(0, 'M'); qr.addData(data.subUrl); qr.make();
+                    document.getElementById('qrContainer').innerHTML = qr.createSvgTag({ scalable: true });
+                } catch {
+                    document.getElementById('qrContainer').innerHTML = '<div style="padding:20px;color:#999;font-size:0.8rem">QR недоступен</div>';
+                }
+
+                // Copy
+                document.getElementById('btnCopy').addEventListener('click', function () {
+                    const url = this.dataset.url;
+                    const btn = this;
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(url);
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
+                        document.body.appendChild(ta); ta.select();
+                        try { document.execCommand('copy'); } catch { }
+                        document.body.removeChild(ta);
+                    }
+                    btn.classList.add('copied');
+                    btn.innerHTML = '✅ Скопировано!';
+                    setTimeout(() => {
+                        btn.classList.remove('copied');
+                        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Скопировать ссылку';
+                    }, 2000);
+                });
             }
         })();
     </script>

@@ -170,16 +170,17 @@ function buildUserHome(data, from, webAppUrl) {
         `📋 Подписка: *${esc(status)}*\n` +
         `📦 Тариф: *${esc(plan)}*\n` +
         `📅 Осталось: *${esc(left)}*\n` +
-        `💰 Баланс: *${esc(String(balance))} ${esc(cur)}*`;
+        `💰 Баланс: *${esc(String(balance))} ${esc(cur)}*\n\n`;
 
     if (sub) {
-        const url = getSubUrl(sub.token);
         const devices = sub.maxDevices > 0 ? `${(sub.devices || []).length}/${sub.maxDevices}` : `${(sub.devices || []).length}/∞`;
-        text += `\n📱 Устройства: *${esc(devices)}*\n\n` +
-            `🔗 *Ссылка для подключения:*\n\`${esc(url)}\``;
+        const url = getSubUrl(sub.token);
+        text +=
+            `📱 Устройства: *${esc(devices)}*\n\n` +
+            `🔗 URL подписки:\n\`${esc(url)}\``;
+    } else {
+        text += `🔗 У вас нет активной подписки`;
     }
-
-    text += '\n\nВыберите действие:';
 
     return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'home') };
 }
@@ -187,35 +188,38 @@ function buildUserHome(data, from, webAppUrl) {
 function buildCabinetScreen(data, from, webAppUrl) {
     const cfg = data.settings || {};
     const user = ensureShopUser(data, from);
-    const sub = getActiveSubscription(data, from.id);
     const cur = cfg.currency || '₽';
+    const plans = (data.plans || []).filter(p => p.enabled !== false).sort((a, b) => (a.price || 0) - (b.price || 0));
 
-    if (!sub) {
-        return {
-            text:
-                `🧑‍💻 *Кабинет*\n\n` +
-                `👤 ${esc(from.first_name || user.firstName || 'Пользователь')}\n` +
-                `💰 Баланс: *${esc(String(user.balance || 0))} ${esc(cur)}*\n\n` +
-                `У вас пока нет активной подписки\\. Откройте магазин и выберите тариф\\.`,
-            reply_markup: buildUserKeyboard(webAppUrl, cfg, 'cabinet')
-        };
+    let text = `🛒 *Выберите тариф*\n\n`;
+    text += `👤 ${esc(from.first_name || user.firstName || 'Пользователь')}\n`;
+    text += `💰 Баланс: *${esc(String(user.balance || 0))} ${esc(cur)}*\n\n`;
+
+    if (plans.length === 0) {
+        text += `❌ Доступных тарифов пока нет\.`;
+        return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'cabinet') };
     }
 
-    const url = getSubUrl(sub.token);
-    const devices = sub.maxDevices > 0 ? `${(sub.devices || []).length}/${sub.maxDevices}` : `${(sub.devices || []).length}/∞`;
-    const traffic = sub.trafficTotal > 0 ? `${sub.trafficUsed || 0}/${sub.trafficTotal} GB` : '∞';
-    return {
-        text:
-            `🧑‍💻 *Кабинет*\n\n` +
-            `📋 Подписка: *${esc(getSubscriptionStatus(sub))}*\n` +
-            `📦 Тариф: *${esc(sub.name)}*\n` +
-            `📅 До: *${esc(formatDate(sub.expiresAt))}* \\(${esc(formatDaysLeft(sub.expiresAt))}\\)\n` +
-            `📱 Устройства: *${esc(devices)}*\n` +
-            `📊 Трафик: *${esc(traffic)}*\n` +
-            `💰 Баланс: *${esc(String(user.balance || 0))} ${esc(cur)}*\n\n` +
-            `🔗 URL подписки:\n\`${esc(url)}\``,
-        reply_markup: buildUserKeyboard(webAppUrl, cfg, 'cabinet')
-    };
+    text += `Доступные тарифы:\n\n`;
+    const keyboard = [];
+
+    for (const plan of plans) {
+        const price = esc(String(plan.price || 0));
+        const duration = plan.duration || 30;
+        const devices = plan.maxDevices > 0 ? `${plan.maxDevices} устр` : '∞ устр';
+        const traffic = plan.traffic > 0 ? `${plan.traffic} GB` : '∞ трафик';
+
+        text += `📦 *${esc(plan.name)}*\n`;
+        text += `💵 Цена: *${price} ${cur}*\n`;
+        text += `📅 Срок: *${duration} дней*\n`;
+        text += `📱 ${devices} · 📊 ${traffic}\n\n`;
+
+        keyboard.push([{ text: `🛒 ${plan.name} — ${price} ${cur}`, callback_data: `buy_plan:${plan.id}` }]);
+    }
+
+    keyboard.push([{ text: '⬅️ Назад', callback_data: 'user:home' }]);
+
+    return { text, reply_markup: { inline_keyboard: keyboard } };
 }
 
 function buildGiftScreen(data, from, webAppUrl) {
@@ -238,10 +242,11 @@ function buildInfoScreen(data, from, webAppUrl) {
     const cfg = data.settings || {};
     const text =
         `❓ *Информация*\n\n` +
-        `1\\. Купите или активируйте подписку\\.\n` +
-        `2\\. Откройте *Кабинет* и скопируйте URL подписки\\.\n` +
-        `3\\. Добавьте URL в Happ VPN, v2rayN, Streisand или V2Box\\.\n\n` +
-        `Если подключение не работает, проверьте срок подписки и лимит устройств\\.`;
+        `1\. Пополните баланс через поддержку\.\n` +
+        `2\. Откройте *Подписка* и купите тариф\.\n` +
+        `3\. Скопируйте URL с *Главного* экрана\.\n` +
+        `4\. Добавьте URL в Happ VPN, v2rayN, Streisand или V2Box\.\n\n` +
+        `Если подключение не работает, проверьте срок подписки и лимит устройств\.`;
 
     return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'info') };
 }
@@ -596,6 +601,82 @@ function setupUserBotHandlers(bot) {
             }
             await showUserScreen(bot, query, screen === 'back' ? 'home' : screen, webAppUrl());
             return bot.answerCallbackQuery(query.id);
+        }
+
+        // Buy plan with balance
+        if (cb.startsWith('buy_plan:')) {
+            const planId = cb.split(':')[1];
+            const data = loadData();
+            const plan = (data.plans || []).find(p => p.id === planId && p.enabled !== false);
+            if (!plan) return bot.answerCallbackQuery(query.id, { text: '❌ Тариф не найден', show_alert: true });
+
+            const user = ensureShopUser(data, query.from);
+            const price = parseFloat(plan.price) || 0;
+            const balance = user.balance || 0;
+            const cur = (data.settings || {}).currency || '₽';
+
+            if (balance < price) {
+                return bot.answerCallbackQuery(query.id, {
+                    text: `❌ Недостаточно средств\n💰 Баланс: ${balance} ${cur}\n💵 Нужно: ${price} ${cur}`,
+                    show_alert: true
+                });
+            }
+
+            // Deduct balance
+            user.balance = balance - price;
+            if (!user.balanceHistory) user.balanceHistory = [];
+            user.balanceHistory.push({
+                type: 'purchase',
+                amount: -price,
+                planId: plan.id,
+                planName: plan.name,
+                date: Date.now()
+            });
+
+            // Activate plan
+            if (!data.subscriptions) data.subscriptions = [];
+            const uid = parseInt(userId);
+            const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(uid) && s.enabled !== false);
+            const templateIds = plan.templateIds || [];
+            let sub, action;
+
+            if (existing && plan.duration > 0) {
+                const base = (existing.expiresAt && existing.expiresAt > Date.now()) ? existing.expiresAt : Date.now();
+                existing.expiresAt = base + (plan.duration * 86400000);
+                if (plan.traffic > 0) existing.trafficTotal = (existing.trafficTotal || 0) + plan.traffic;
+                if (templateIds.length) existing.templateIds = [...new Set([...(existing.templateIds || []), ...templateIds])];
+                existing.notes = (existing.notes || '') + ` | +${plan.duration}д (Покупка через бот: ${plan.name})`;
+                sub = existing;
+                action = 'extended';
+            } else {
+                sub = {
+                    id: generateId(),
+                    name: `${plan.name}`,
+                    trafficTotal: plan.traffic || 0,
+                    trafficUsed: 0,
+                    maxDevices: plan.maxDevices || 0,
+                    token: generateToken(),
+                    templateIds,
+                    enabled: true,
+                    expiresAt: plan.duration > 0 ? Date.now() + (plan.duration * 86400000) : 0,
+                    notes: `Покупка через бот: ${plan.name}`,
+                    devices: [],
+                    telegramUsers: [uid],
+                    createdAt: Date.now()
+                };
+                data.subscriptions.push(sub);
+                action = 'created';
+            }
+
+            saveData(data);
+
+            const url = getSubUrl(sub.token);
+            const msg = action === 'extended'
+                ? `✅ Подписка продлена!\n\n📦 ${esc(plan.name)}\n📅 До: ${esc(formatDate(sub.expiresAt))}\n🔗 URL:\n\`${esc(url)}\`\n\n💰 Списано: ${price} ${cur}\n💰 Баланс: ${user.balance} ${cur}`
+                : `🎉 Подписка активирована!\n\n📦 ${esc(plan.name)}\n🔗 URL:\n\`${esc(url)}\`\n\n💰 Списано: ${price} ${cur}\n💰 Баланс: ${user.balance} ${cur}`;
+
+            await bot.sendMessage(chatId, msg, { parse_mode: 'MarkdownV2' });
+            return bot.answerCallbackQuery(query.id, { text: '✅ Тариф активирован!' });
         }
 
         if (cb.startsWith('approve_order:')) {
