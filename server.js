@@ -241,8 +241,17 @@ function setVlessUriName(uri, name) {
     return `${base}#${encodeURIComponent(String(name || 'Server').slice(0, 120))}`;
 }
 
+function extractFlagEmoji(text = '') {
+    if (!text) return '';
+    const str = String(text);
+    const flagRegex = /[\u{1F1E6}-\u{1F1FF}]{2}/u;
+    const match = str.match(flagRegex);
+    return match ? match[0] : '';
+}
+
 function formatVlessName(settings = {}, context = {}) {
     const template = String(settings.vlessNameTemplate || '{server}').trim() || '{server}';
+    const origFlag = extractFlagEmoji(context.server || '');
     const values = {
         server: context.server || context.host || 'Server',
         template: context.template || '',
@@ -253,7 +262,9 @@ function formatVlessName(settings = {}, context = {}) {
         domain: context.domain || settings.relayDomain || '',
         sub: context.sub || '',
         country: context.country || '',
-        flag: context.flag || ''
+        flag: context.flag || '',
+        origflag: origFlag,
+        donorflag: origFlag
     };
     const result = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => {
         const value = values[key] !== undefined ? values[key] : '';
