@@ -164,14 +164,22 @@ function buildUserHome(data, from, webAppUrl) {
     const balance = user.balance || 0;
     const cur = cfg.currency || '₽';
 
-    const text =
+    let text =
         `🛡 *${esc(shopName)}*\n\n` +
         `👤 ${esc(from.first_name || user.firstName || 'Пользователь')}\n\n` +
         `📋 Подписка: *${esc(status)}*\n` +
         `📦 Тариф: *${esc(plan)}*\n` +
         `📅 Осталось: *${esc(left)}*\n` +
-        `💰 Баланс: *${esc(String(balance))} ${esc(cur)}*\n\n` +
-        `Выберите действие:`;
+        `💰 Баланс: *${esc(String(balance))} ${esc(cur)}*`;
+
+    if (sub) {
+        const url = getSubUrl(sub.token);
+        const devices = sub.maxDevices > 0 ? `${(sub.devices || []).length}/${sub.maxDevices}` : `${(sub.devices || []).length}/∞`;
+        text += `\n📱 Устройства: *${esc(devices)}*\n\n` +
+            `🔗 *Ссылка для подключения:*\n\`${esc(url)}\``;
+    }
+
+    text += '\n\nВыберите действие:';
 
     return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'home') };
 }
