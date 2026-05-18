@@ -215,12 +215,13 @@ function buildGiftScreen(data, from, webAppUrl) {
     const user = ensureShopUser(data, from);
     const botLink = cfg.userBotLink || '';
     const refLink = botLink && user.referralCode ? `${botLink}?start=ref_${user.referralCode}` : '';
-    const bonus = parseInt(cfg.referralBonusDays) || 3;
+    const bonusRub = parseInt(cfg.referralBonusRub) || 40;
+    const cur = cfg.currency || '₽';
 
     const text =
         `🤝 *Подарить подписку*\n\n` +
-        `Отправьте другу ссылку на магазин\\. Если он перейдет по вашей реферальной ссылке, вы получите бонус: *${bonus} дн\\.*\n\n` +
-        (refLink ? `🔗 Ваша ссылка:\n\`${esc(refLink)}\`` : `🔗 Ссылка появится после сохранения ссылки бота в настройках\\.`);
+        `Отправьте другу ссылку на магазин\. Если он перейдет по вашей реферальной ссылке, вы получите бонус: *${bonusRub} ${cur}\.*\n\n` +
+        (refLink ? `🔗 Ваша ссылка:\n\`${esc(refLink)}\`` : `🔗 Ссылка появится после сохранения ссылки бота в настройках\.`);
 
     return { text, reply_markup: buildUserKeyboard(webAppUrl, cfg, 'gift') };
 }
@@ -279,6 +280,50 @@ function setupUserBotHandlers(bot) {
         return `${base}/shop.html`;
     };
 
+    // ===== TRIAL SUBSCRIPTION =====
+    function activateTrialForUser(data, userId) {
+        const s = data.settings || {};
+        const trialDays = parseInt(s.trialDays) || 0;
+        if (trialDays <= 0) return null;
+
+        // Check if user already has any subscription
+        const userSubs = (data.subscriptions || []).filter(sub => sub.telegramUsers && sub.telegramUsers.includes(userId));
+        if (userSubs.length > 0) return null;
+
+        // Check if user already used trial
+        const user = (data.shopUsers || []).find(u => u.userId === userId);
+        if (user && user.trialUsed) return null;
+
+        // Mark trial as used
+        if (user) user.trialUsed = true;
+
+        // Create trial subscription
+        const templateIds = s.trialTemplateIds || [];
+        if (!templateIds.length && data.templates && data.templates.length > 0) {
+            // Use first enabled template if none specified
+            templateIds.push(...data.templates.filter(t => t.enabled !== false).map(t => t.id));
+        }
+
+        if (!data.subscriptions) data.subscriptions = [];
+        const sub = {
+            id: generateId(),
+            name: `Пробная подписка`,
+            token: generateToken(),
+            templateIds: templateIds.slice(0, 5),
+            telegramUsers: [userId],
+            devices: [],
+            maxDevices: 2,
+            trafficTotal: 0,
+            trafficUsed: 0,
+            enabled: true,
+            expiresAt: Date.now() + (trialDays * 86400000),
+            createdAt: Date.now(),
+            isTrial: true
+        };
+        data.subscriptions.push(sub);
+        return sub;
+    }
+
     // /start
     bot.onText(/\/start(.*)/, async (msg, match) => {
         const chatId = msg.chat.id;
@@ -325,18 +370,14 @@ function setupUserBotHandlers(bot) {
                 thisUser.referredBy = referrer.userId;
                 referrer.referralCount = (referrer.referralCount || 0) + 1;
                 referrer.referralInvited = (referrer.referralInvited || 0) + 1;
-                const bonusDays = parseInt((data.settings || {}).referralBonusDays) || 3;
-                referrer.referralDaysBonus = (referrer.referralDaysBonus || 0) + bonusDays;
-
-                // Add bonus days to referrer's subscription
-                const referrerSubs = (data.subscriptions || []).filter(s => s.telegramUsers && s.telegramUsers.includes(referrer.userId));
-                const activeSub = referrerSubs.find(s => s.enabled !== false && (!s.expiresAt || Date.now() < s.expiresAt));
-                if (activeSub && activeSub.expiresAt) {
-                    activeSub.expiresAt += bonusDays * 86400000;
-                }
+                const bonusRub = parseInt((data.settings || {}).referralBonusRub) || 40;
+                referrer.balance = (referrer.balance || 0) + bonusRub;
+                if (!referrer.balanceHistory) referrer.balanceHistory = [];
+                referrer.balanceHistory.push({ type: 'referral', amount: bonusRub, fromUserId: userId, date: Date.now() });
 
                 saveData(data);
-                bot.sendMessage(referrer.userId, `🎉 По вашей ссылке пришёл новый пользователь! +${bonusDays} дней к подписке!`).catch(() => { });
+                const cur = (data.settings || {}).currency || '₽';
+                bot.sendMessage(referrer.userId, `🎉 По вашей ссылке пришёл новый пользователь! +${bonusRub} ${cur} на баланс!`).catch(() => { });
             } else {
                 saveData(data);
             }
@@ -346,9 +387,25 @@ function setupUserBotHandlers(bot) {
         // Стандартный /start — главное меню
         const data2 = loadData();
         ensureShopUser(data2, msg.from);
+
+        // Try activate trial for new user
+        const trialSub = activateTrialForUser(data2, userId);
         saveData(data2);
+
         const home = buildUserHome(data2, msg.from, webAppUrl());
         const welcomeMsg = home.text;
+
+        // Send trial notification
+        if (trialSub) {
+            const trialDays = Math.ceil((trialSub.expiresAt - Date.now()) / 86400000);
+            bot.sendMessage(chatId,
+                `🎁 *Пробная подписка активирована!*\n\n` +
+                `📋 Доступно: ${trialDays} дней\n` +
+                `📱 Устройств: ${trialSub.maxDevices}\n\n` +
+                `🔗 URL подписки:\n\`${esc(getSubUrl(trialSub.token))}\``,
+                { parse_mode: 'MarkdownV2' }
+            ).catch(() => { });
+        }
         const welcomePhoto = cfg.shopWelcomePhoto || '';
 
         if (welcomePhoto) {
@@ -608,10 +665,9 @@ function setupUserBotHandlers(bot) {
         bot.answerCallbackQuery(query.id);
     });
 
-    // Admin text reply to tickets
-    bot.on('message', (msg) => {
-        if (msg.photo || msg.document || msg.web_app_data) return;
-        if (!msg.text) return;
+    // Admin reply to tickets (text, photo, document)
+    bot.on('message', async (msg) => {
+        if (msg.web_app_data) return;
         const userId = msg.from.id;
         if (!getAdminIds().includes(userId)) return;
         if (!global.adminReplyState || !global.adminReplyState[userId]) return;
@@ -624,12 +680,40 @@ function setupUserBotHandlers(bot) {
         if (!ticket) return bot.sendMessage(msg.chat.id, '❌ Тикет не найден');
 
         if (!ticket.messages) ticket.messages = [];
-        ticket.messages.push({ from: 'admin', text: msg.text, date: Date.now() });
+
+        let text = msg.text || msg.caption || '';
+        let messageType = 'text';
+        let fileId = null;
+
+        if (msg.photo && msg.photo.length > 0) {
+            messageType = 'photo';
+            fileId = msg.photo[msg.photo.length - 1].file_id;
+            if (!text) text = '📷 Фото';
+        } else if (msg.document) {
+            messageType = 'document';
+            fileId = msg.document.file_id;
+            if (!text) text = `📎 ${msg.document.file_name || 'Файл'}`;
+        } else if (!msg.text) {
+            return bot.sendMessage(msg.chat.id, '❌ Отправьте текст, фото или документ');
+        }
+
+        ticket.messages.push({ from: 'admin', text, type: messageType, fileId, date: Date.now() });
         ticket.updatedAt = Date.now();
         saveData(data);
 
         bot.sendMessage(msg.chat.id, `✅ Ответ отправлен в тикет #${ticket.id.substring(0, 8)}`);
-        bot.sendMessage(ticket.userId, `💬 Ответ поддержки:\n\n📋 ${ticket.subject}\n\n${msg.text}`).catch(() => { });
+
+        // Send to user
+        const userMsg = `💬 Ответ поддержки:\n\n📋 ${ticket.subject}\n\n${text}`;
+        try {
+            if (messageType === 'photo' && fileId) {
+                await bot.sendPhoto(ticket.userId, fileId, { caption: userMsg });
+            } else if (messageType === 'document' && fileId) {
+                await bot.sendDocument(ticket.userId, fileId, { caption: userMsg });
+            } else {
+                await bot.sendMessage(ticket.userId, userMsg);
+            }
+        } catch { }
     });
 }
 

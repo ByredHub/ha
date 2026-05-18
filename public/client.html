@@ -759,19 +759,19 @@
                 <div class="card apps-card" style="animation:fadeUp 0.6s ease 0.35s backwards">
                     <div class="card-title">📱 Скачать приложение</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                        <a href="https://apps.apple.com/app/happ-vpn/id6504523051" target="_blank" class="app-btn">
+                        <a href="${esc(data.appLinks?.happIos || 'https://apps.apple.com/app/id6504287215')}" target="_blank" class="app-btn">
                             <span style="font-size:1.3rem">🍎</span>
                             <div><div style="font-weight:600;font-size:0.8rem">Happ</div><div style="font-size:0.6rem;color:var(--text3)">iOS</div></div>
                         </a>
-                        <a href="https://apps.apple.com/app/streisand/id6450534064" target="_blank" class="app-btn">
+                        <a href="${esc(data.appLinks?.streisandIos || 'https://apps.apple.com/app/streisand/id6450534064')}" target="_blank" class="app-btn">
                             <span style="font-size:1.3rem">🍏</span>
                             <div><div style="font-weight:600;font-size:0.8rem">Streisand</div><div style="font-size:0.6rem;color:var(--text3)">iOS</div></div>
                         </a>
-                        <a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank" class="app-btn">
+                        <a href="${esc(data.appLinks?.v2rayAndroid || 'https://play.google.com/store/apps/details?id=com.v2ray.ang')}" target="_blank" class="app-btn">
                             <span style="font-size:1.3rem">🤖</span>
                             <div><div style="font-weight:600;font-size:0.8rem">v2rayNG</div><div style="font-size:0.6rem;color:var(--text3)">Android</div></div>
                         </a>
-                        <a href="https://github.com/MatsuriDayo/nekoray/releases" target="_blank" class="app-btn">
+                        <a href="${esc(data.appLinks?.nekorayDesktop || 'https://github.com/MatsuriDayo/nekoray/releases')}" target="_blank" class="app-btn">
                             <span style="font-size:1.3rem">💻</span>
                             <div><div style="font-weight:600;font-size:0.8rem">Nekoray</div><div style="font-size:0.6rem;color:var(--text3)">Windows/Mac</div></div>
                         </a>

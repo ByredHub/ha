@@ -727,9 +727,35 @@
                                 <p class="hint">Бота нужно добавить админом в канал. Формат: @channel или chatId | название | ссылка.</p>
                             </div>
                         </div>
-                        <div class="form-group"><label for="settingReferralBonusDays">Бонус за реферала
-                                (дней)</label><input type="number" id="settingReferralBonusDays" placeholder="3" min="0"
+                        <div class="form-group"><label for="settingReferralBonusRub">Бонус за реферала
+                                (рублей)</label><input type="number" id="settingReferralBonusRub" placeholder="40" min="0"
                                 class="form-input" style="max-width:120px"></div>
+                        <div class="form-group"><label for="settingTrialDays">Пробная подписка (дней)</label><input
+                                type="number" id="settingTrialDays" placeholder="0" min="0" class="form-input"
+                                style="max-width:120px">
+                            <p class="hint">0 = без пробной подписки</p>
+                        </div>
+                        <div class="form-group"><label for="settingExpireNotifyDays">Уведомления об окончании
+                                (дни)</label><input type="text" id="settingExpireNotifyDays" placeholder="3,2,1"
+                                class="form-input" style="max-width:200px">
+                            <p class="hint">Через запятую: за сколько дней уведомлять</p>
+                        </div>
+                        <div class="form-group"><label class="checkbox-label"><input type="checkbox"
+                                    id="settingExpireNotifyAfter"> Уведомлять после окончания (каждый день)</label></div>
+                        <h3 style="margin-top:20px">🔗 Ссылки для скачивания VPN</h3>
+                        <div class="form-group"><label for="settingAppLinkHappIos">Happ iOS</label><input type="url"
+                                id="settingAppLinkHappIos" placeholder="https://apps.apple.com/app/id6504287215"
+                                class="form-input"></div>
+                        <div class="form-group"><label for="settingAppLinkStreisandIos">Streisand iOS</label><input
+                                type="url" id="settingAppLinkStreisandIos"
+                                placeholder="https://apps.apple.com/app/streisand/id6450534064" class="form-input"></div>
+                        <div class="form-group"><label for="settingAppLinkV2rayAndroid">v2rayNG Android</label><input
+                                type="url" id="settingAppLinkV2rayAndroid"
+                                placeholder="https://play.google.com/store/apps/details?id=com.v2ray.ang"
+                                class="form-input"></div>
+                        <div class="form-group"><label for="settingAppLinkNekorayDesktop">Nekoray Desktop</label><input
+                                type="url" id="settingAppLinkNekorayDesktop"
+                                placeholder="https://github.com/MatsuriDayo/nekoray/releases" class="form-input"></div>
                         <div class="form-group"><label for="settingShopWelcome">Текст приветствия бота <span
                                     class="label-hint">(при /start)</span></label><textarea id="settingShopWelcome"
                                 placeholder="Добро пожаловать!" class="form-input form-textarea" rows="2"></textarea>

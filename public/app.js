@@ -846,7 +846,14 @@
         if ($('#settingUserBotLink')) $('#settingUserBotLink').value = settings.userBotLink || '';
         if ($('#settingRequiredChannelsEnabled')) $('#settingRequiredChannelsEnabled').checked = !!settings.requiredChannelsEnabled;
         if ($('#settingRequiredChannels')) $('#settingRequiredChannels').value = settings.requiredChannels || '';
-        if ($('#settingReferralBonusDays')) $('#settingReferralBonusDays').value = settings.referralBonusDays || 3;
+        if ($('#settingReferralBonusRub')) $('#settingReferralBonusRub').value = settings.referralBonusRub || 40;
+        if ($('#settingTrialDays')) $('#settingTrialDays').value = settings.trialDays || 0;
+        if ($('#settingExpireNotifyDays')) $('#settingExpireNotifyDays').value = (settings.expireNotifyDays || [3, 2, 1]).join(',');
+        if ($('#settingExpireNotifyAfter')) $('#settingExpireNotifyAfter').checked = settings.expireNotifyAfter !== false;
+        if ($('#settingAppLinkHappIos')) $('#settingAppLinkHappIos').value = settings.appLinks?.happIos || '';
+        if ($('#settingAppLinkStreisandIos')) $('#settingAppLinkStreisandIos').value = settings.appLinks?.streisandIos || '';
+        if ($('#settingAppLinkV2rayAndroid')) $('#settingAppLinkV2rayAndroid').value = settings.appLinks?.v2rayAndroid || '';
+        if ($('#settingAppLinkNekorayDesktop')) $('#settingAppLinkNekorayDesktop').value = settings.appLinks?.nekorayDesktop || '';
         if ($('#settingShopWelcome')) $('#settingShopWelcome').value = settings.shopWelcome || '';
         // Welcome photo preview
         if ($('#welcomePhotoPreview')) {
@@ -907,7 +914,16 @@
             userBotLink: $('#settingUserBotLink') ? $('#settingUserBotLink').value.trim() : '',
             requiredChannelsEnabled: $('#settingRequiredChannelsEnabled') ? $('#settingRequiredChannelsEnabled').checked : false,
             requiredChannels: $('#settingRequiredChannels') ? $('#settingRequiredChannels').value.trim() : '',
-            referralBonusDays: $('#settingReferralBonusDays') ? parseInt($('#settingReferralBonusDays').value) || 3 : 3,
+            referralBonusRub: $('#settingReferralBonusRub') ? parseInt($('#settingReferralBonusRub').value) || 40 : 40,
+            trialDays: $('#settingTrialDays') ? parseInt($('#settingTrialDays').value) || 0 : 0,
+            expireNotifyDays: $('#settingExpireNotifyDays') ? $('#settingExpireNotifyDays').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : [3, 2, 1],
+            expireNotifyAfter: $('#settingExpireNotifyAfter') ? $('#settingExpireNotifyAfter').checked : true,
+            appLinks: {
+                happIos: $('#settingAppLinkHappIos') ? $('#settingAppLinkHappIos').value.trim() : '',
+                streisandIos: $('#settingAppLinkStreisandIos') ? $('#settingAppLinkStreisandIos').value.trim() : '',
+                v2rayAndroid: $('#settingAppLinkV2rayAndroid') ? $('#settingAppLinkV2rayAndroid').value.trim() : '',
+                nekorayDesktop: $('#settingAppLinkNekorayDesktop') ? $('#settingAppLinkNekorayDesktop').value.trim() : ''
+            },
             shopWelcome: $('#settingShopWelcome') ? $('#settingShopWelcome').value.trim() : ''
         };
         const yookassaSecret = $('#settingYooKassaSecretKey') ? $('#settingYooKassaSecretKey').value.trim() : '';

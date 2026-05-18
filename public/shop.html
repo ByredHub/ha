@@ -1485,12 +1485,12 @@ ${yookassaBlock}${plategaBlock}${manualBlock}<button class="btn btn-o" onclick="
 
             // REFERRALS
             function rR() {
-                const rc = ud.referralCode || '—', rn = ud.referralCount || 0, ri = ud.referralInvited || 0, rd = ud.referralDaysBonus || 0, bd = cfg.referralBonusDays || 3, rl = cfg.userBotLink ? cfg.userBotLink + '?start=ref_' + rc : '';
+                const rc = ud.referralCode || '—', rn = ud.referralCount || 0, ri = ud.referralInvited || 0, rb = ud.referralBalanceEarned || 0, br = cfg.referralBonusRub || 40, cur = cfg.currency || '₽', rl = cfg.userBotLink ? cfg.userBotLink + '?start=ref_' + rc : '';
                 $('rC').innerHTML = `<div class="cd cd-glow" style="text-align:center;padding:18px"><div style="font-size:1.02rem;font-weight:700;margin-bottom:3px">${I.users} Реферальная программа</div>
-<div style="font-size:.8rem;color:var(--t2)">Приглашайте друзей — <strong style="color:var(--gn)">+${bd} дней</strong> за каждого!</div></div>
+<div style="font-size:.8rem;color:var(--t2)">Приглашайте друзей — <strong style="color:var(--gn)">+${br} ${cur}</strong> за каждого!</div></div>
 <div class="ref-c" onclick="cp('${esc(rl || rc)}')"><div style="font-size:.68rem;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:600">${I.link} Ваша ссылка</div><div class="ref-v">${esc(rc)}</div><div style="font-size:.68rem;color:var(--t3);margin-top:4px">Нажмите чтобы скопировать</div></div>
 <div class="ref-sts"><div class="ref-st"><div class="ref-st-v gt">${rn}</div><div class="st-l">Всего</div></div><div class="ref-st"><div class="ref-st-v" style="color:var(--gn)">${ri}</div><div class="st-l">Активных</div></div>
-<div class="ref-st"><div class="ref-st-v" style="color:var(--am)">+${rd}</div><div class="st-l">Дней</div></div></div>
+<div class="ref-st"><div class="ref-st-v" style="color:var(--am)">+${rb}</div><div class="st-l">${cur}</div></div></div>
 ${rl ? `<button class="btn btn-p" onclick="cp('${esc(rl)}')">${I.copy} Скопировать ссылку</button><button class="btn btn-o" onclick="shr()">${I.share} Поделиться</button>`
                         : '<div class="cd" style="text-align:center;font-size:.8rem;color:var(--t2)">Ссылка появится после подписки</div>'}`
             }

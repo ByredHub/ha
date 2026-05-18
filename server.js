@@ -822,6 +822,55 @@ setInterval(checkExpiredSubscriptions, 3600000);
 // Also check on startup after 15 seconds
 setTimeout(checkExpiredSubscriptions, 15000);
 
+// ===== EXPIRATION NOTIFICATIONS =====
+function checkExpirationNotifications() {
+    const data = loadData();
+    const now = Date.now();
+    const s = data.settings || {};
+    const notifyDays = s.expireNotifyDays || [3, 2, 1];
+    const notifyAfter = s.expireNotifyAfter !== false;
+    const userBot = global.happUserBot;
+    if (!userBot) return;
+
+    const notifiedKey = (sub, days) => `notified_${sub.id}_${days}`;
+    const notifiedAfterKey = (sub) => `notified_after_${sub.id}_${new Date().toDateString()}`;
+
+    for (const sub of (data.subscriptions || [])) {
+        if (!sub.expiresAt || sub.enabled === false) continue;
+        if (!sub.telegramUsers || sub.telegramUsers.length === 0) continue;
+
+        const daysLeft = Math.ceil((sub.expiresAt - now) / 86400000);
+
+        // Notify before expiration
+        for (const days of notifyDays) {
+            if (daysLeft === days && !sub[notifiedKey(sub, days)]) {
+                sub[notifiedKey(sub, days)] = true;
+                const msg = `⏰ *Подписка истекает через ${days} ${days === 1 ? 'день' : 'дня'}!*\n\n📋 ${sub.name}\n📅 До: ${new Date(sub.expiresAt).toLocaleDateString('ru-RU')}\n\nПродлите подписку, чтобы не потерять доступ.`;
+                for (const uid of sub.telegramUsers) {
+                    userBot.sendMessage(parseInt(uid), msg, { parse_mode: 'Markdown' }).catch(() => { });
+                }
+            }
+        }
+
+        // Notify after expiration (once per day)
+        if (notifyAfter && daysLeft < 0) {
+            if (!sub[notifiedAfterKey(sub)]) {
+                sub[notifiedAfterKey(sub)] = true;
+                const msg = `🔴 *Подписка истекла!*\n\n📋 ${sub.name}\n📅 Истекла: ${new Date(sub.expiresAt).toLocaleDateString('ru-RU')}\n\nПродлите подписку для восстановления доступа.`;
+                for (const uid of sub.telegramUsers) {
+                    userBot.sendMessage(parseInt(uid), msg, { parse_mode: 'Markdown' }).catch(() => { });
+                }
+            }
+        }
+    }
+
+    saveData(data);
+}
+
+// Check notifications every hour
+setInterval(checkExpirationNotifications, 3600000);
+setTimeout(checkExpirationNotifications, 20000);
+
 function getDefaultSettings() {
     return {
         title: 'HappVPN', supportUrl: '', website: '', updateInterval: 12, serverUrl: '', adminPassword: '', botDeepLink: '',
@@ -833,7 +882,22 @@ function getDefaultSettings() {
         plategaEnabled: false, plategaMerchantId: '', plategaSecretKey: '', plategaPaymentMethod: 11, plategaDescription: 'Оплата картой или СБП через Platega',
         requiredChannelsEnabled: false, requiredChannels: '',
         threeDhEnabled: false, threeDhPin: '', threeDhMode: 7, threeDhDeviceType: 2, threeDhProtocol: 'vless', threeDhLocationId: '', threeDhNameTemplate: 'HappVPN-{userId}-{order}',
-        notifySuspiciousIp: true
+        notifySuspiciousIp: true,
+        // Referral system: rubles instead of days
+        referralBonusRub: 40,
+        // Trial subscription
+        trialDays: 0,
+        trialTemplateIds: [],
+        // App download links
+        appLinks: {
+            happIos: 'https://apps.apple.com/app/id6504287215',
+            streisandIos: 'https://apps.apple.com/app/streisand/id6450534064',
+            v2rayAndroid: 'https://play.google.com/store/apps/details?id=com.v2ray.ang',
+            nekorayDesktop: 'https://github.com/MatsuriDayo/nekoray/releases'
+        },
+        // Expiration notifications (days before)
+        expireNotifyDays: [3, 2, 1],
+        expireNotifyAfter: true
     };
 }
 
@@ -1706,7 +1770,8 @@ app.get('/api/client-sub', async (req, res) => {
         accessCount: sub.accessCount || 0,
         subUrl,
         supportUrl: s.supportUrl || '',
-        title: s.title || 'HappVPN'
+        title: s.title || 'HappVPN',
+        appLinks: s.appLinks || getDefaultSettings().appLinks
     });
 });
 
@@ -3364,6 +3429,11 @@ app.get('/api/shop/user-data', async (req, res) => {
         };
     }
 
+    // Calculate referral balance earned from history
+    const referralBalanceEarned = (user.balanceHistory || [])
+        .filter(h => h.type === 'referral')
+        .reduce((sum, h) => sum + (h.amount || 0), 0);
+
     res.json({
         requiredSubscription: required.ok ? null : {
             required: true,
@@ -3374,7 +3444,7 @@ app.get('/api/shop/user-data', async (req, res) => {
         referralCode: user.referralCode || '',
         referralCount: user.referralCount || 0,
         referralInvited: user.referralInvited || 0,
-        referralDaysBonus: user.referralDaysBonus || 0,
+        referralBalanceEarned: referralBalanceEarned,
         balanceHistory: (user.balanceHistory || []).slice(-20).reverse()
     });
 });
