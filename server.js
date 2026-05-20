@@ -849,6 +849,75 @@ setInterval(() => checkExpiredSubscriptions().catch(e => console.log('checkExpir
 // Also check on startup after 15 seconds
 setTimeout(() => checkExpiredSubscriptions().catch(e => console.log('checkExpiredSubscriptions error:', e.message)), 15000);
 
+// ===== MIGRATE EXISTING TRIAL SUBS TO 3DH =====
+async function migrateTrialSubsTo3DH() {
+    const data = loadData();
+    const s = data.settings || {};
+    if (!isThreeDhConfigured(s)) return;
+
+    const now = Date.now();
+    const trials = (data.subscriptions || []).filter(sub =>
+        sub.isTrial &&
+        sub.enabled !== false &&
+        (!sub.expiresAt || sub.expiresAt > now) &&
+        !sub.threeDhDeviceId
+    );
+
+    if (!trials.length) return;
+    console.log(`  3DH migration: found ${trials.length} trial subs without 3DH device`);
+
+    for (const sub of trials) {
+        try {
+            const userId = (sub.telegramUsers || [])[0] || 'unknown';
+            const order = { id: sub.id, userId: String(userId), username: '', firstName: '' };
+            const plan = { name: 'Trial', useThreeDh: true };
+            const device = await createThreeDhDevice(s, order, plan);
+            if (!device || !device.configs || !device.configs.length) continue;
+
+            // Remove old template if it was a regular one
+            if (sub.templateIds && sub.templateIds.length) {
+                data.templates = (data.templates || []).filter(t =>
+                    !sub.templateIds.includes(t.id) || (t.threeDh)
+                );
+            }
+
+            const tplId = generateId();
+            const template = {
+                id: tplId,
+                name: `Trial-${userId}`,
+                uris: device.configs,
+                uriDirect: device.configs.map(() => true),
+                uriNames: [],
+                enabled: true,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                threeDh: {
+                    deviceId: device.deviceId,
+                    deviceName: device.name,
+                    serverId: device.serverId,
+                    serverName: device.serverName,
+                    sourceUrl: device.sourceUrl || '',
+                    orderId: sub.id
+                }
+            };
+            if (!data.templates) data.templates = [];
+            data.templates.push(template);
+
+            sub.templateIds = [tplId];
+            sub.threeDhDeviceId = device.deviceId;
+            sub.threeDhTemplateId = tplId;
+
+            saveData(data);
+            console.log(`  3DH migration: sub ${sub.id} (user ${userId}) → device ${device.deviceId}`);
+        } catch (e) {
+            console.log(`  3DH migration error for sub ${sub.id}: ${e.message}`);
+        }
+    }
+}
+
+// Run migration 30 seconds after startup
+setTimeout(() => migrateTrialSubsTo3DH().catch(e => console.log('3DH migration error:', e.message)), 30000);
+
 // ===== EXPIRATION NOTIFICATIONS =====
 function checkExpirationNotifications() {
     const data = loadData();
