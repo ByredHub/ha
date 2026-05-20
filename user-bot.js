@@ -319,7 +319,7 @@ function setupUserBotHandlers(bot) {
         // Try to create 3DH device for trial
         if (s.threeDhEnabled && s.threeDhPin && s.trialUseThreeDh !== false) {
             try {
-                const { createThreeDhDevice } = require('./server');
+                const createThreeDhDevice = global.createThreeDhDevice;
                 const order = { id: subId, userId: String(userId), username: fromUser && fromUser.username || '', firstName: fromUser && fromUser.first_name || '' };
                 const plan = { name: 'Trial', useThreeDh: true };
                 const device = await createThreeDhDevice(s, order, plan);

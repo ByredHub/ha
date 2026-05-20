@@ -4933,6 +4933,10 @@ const certFile = path.join(CERT_DIR, 'fullchain.pem');
 const keyFile = path.join(CERT_DIR, 'privkey.pem');
 
 function startBot() {
+    // Expose 3DH functions globally for user-bot.js
+    global.createThreeDhDevice = createThreeDhDevice;
+    global.deleteThreeDhDevice = deleteThreeDhDevice;
+
     try {
         const botModule = require('./bot.js');
         if (botModule.startBot) botModule.startBot();
