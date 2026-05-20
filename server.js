@@ -867,52 +867,68 @@ async function migrateTrialSubsTo3DH() {
     console.log(`  3DH migration: found ${trials.length} trial subs without 3DH device`);
 
     for (const sub of trials) {
-        try {
-            const userId = (sub.telegramUsers || [])[0] || 'unknown';
-            const order = { id: sub.id, userId: String(userId), username: '', firstName: '' };
-            const plan = { name: 'Trial', useThreeDh: true };
-            const device = await createThreeDhDevice(s, order, plan);
-            if (!device || !device.configs || !device.configs.length) continue;
+        const userId = (sub.telegramUsers || [])[0] || 'unknown';
+        let device = null;
 
-            // Remove old template if it was a regular one
-            if (sub.templateIds && sub.templateIds.length) {
-                data.templates = (data.templates || []).filter(t =>
-                    !sub.templateIds.includes(t.id) || (t.threeDh)
-                );
+        // Try up to 2 times per sub (retry on timeout)
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const order = { id: sub.id, userId: String(userId), username: '', firstName: '' };
+                const plan = { name: 'Trial', useThreeDh: true };
+                device = await createThreeDhDevice(s, order, plan);
+                break;
+            } catch (e) {
+                console.log(`  3DH migration error for sub ${sub.id} (attempt ${attempt}): ${e.message}`);
+                if (attempt < 2) await new Promise(r => setTimeout(r, 8000));
             }
-
-            const tplId = generateId();
-            const template = {
-                id: tplId,
-                name: `Trial-${userId}`,
-                uris: device.configs,
-                uriDirect: device.configs.map(() => true),
-                uriNames: [],
-                enabled: true,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-                threeDh: {
-                    deviceId: device.deviceId,
-                    deviceName: device.name,
-                    serverId: device.serverId,
-                    serverName: device.serverName,
-                    sourceUrl: device.sourceUrl || '',
-                    orderId: sub.id
-                }
-            };
-            if (!data.templates) data.templates = [];
-            data.templates.push(template);
-
-            sub.templateIds = [tplId];
-            sub.threeDhDeviceId = device.deviceId;
-            sub.threeDhTemplateId = tplId;
-
-            saveData(data);
-            console.log(`  3DH migration: sub ${sub.id} (user ${userId}) → device ${device.deviceId}`);
-        } catch (e) {
-            console.log(`  3DH migration error for sub ${sub.id}: ${e.message}`);
         }
+
+        if (!device || !device.configs || !device.configs.length) {
+            await new Promise(r => setTimeout(r, 5000));
+            continue;
+        }
+
+        // Remove old non-3DH template
+        if (sub.templateIds && sub.templateIds.length) {
+            data.templates = (data.templates || []).filter(t =>
+                !sub.templateIds.includes(t.id) || t.threeDh
+            );
+        }
+
+        const tplId = generateId();
+        const template = {
+            id: tplId,
+            name: `Trial-${userId}`,
+            uris: device.configs,
+            uriDirect: device.configs.map(() => true),
+            uriNames: [],
+            enabled: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            threeDh: {
+                deviceId: device.deviceId,
+                deviceName: device.name,
+                serverId: device.serverId,
+                serverName: device.serverName,
+                sourceUrl: device.sourceUrl || '',
+                orderId: sub.id
+            }
+        };
+        if (!data.templates) data.templates = [];
+        data.templates.push(template);
+
+        sub.templateIds = [tplId];
+        sub.threeDhDeviceId = device.deviceId;
+        sub.threeDhTemplateId = tplId;
+
+        saveData(data);
+        console.log(`  3DH migration: sub ${sub.id} (user ${userId}) → device ${device.deviceId}`);
+
+        // Pause between devices to avoid 3DH rate limiting
+        await new Promise(r => setTimeout(r, 6000));
     }
+
+    console.log('  3DH migration: done');
 }
 
 // Run migration 30 seconds after startup
