@@ -783,7 +783,7 @@ app.post('/api/templates/:id/sync', authMiddleware, async (req, res) => {
 });
 
 // ===== AUTO-DISABLE EXPIRED SUBSCRIPTIONS =====
-function checkExpiredSubscriptions() {
+async function checkExpiredSubscriptions() {
     const data = loadData();
     const now = Date.now();
     let changed = false;
@@ -810,6 +810,22 @@ function checkExpiredSubscriptions() {
             changed = true;
             console.log(`  ⏰ Auto-disabled "${sub.name}": ${reason}`);
 
+            // If trial subscription with 3DH device — delete device and template
+            if (sub.isTrial && sub.threeDhDeviceId) {
+                const settings = data.settings || {};
+                deleteThreeDhDevice(settings, sub.threeDhDeviceId).then(ok => {
+                    console.log(`  3DH trial device ${sub.threeDhDeviceId} delete: ${ok ? 'ok' : 'failed'}`);
+                }).catch(e => {
+                    console.log(`  3DH trial device delete error: ${e.message}`);
+                });
+                // Remove 3DH template from data
+                if (sub.threeDhTemplateId) {
+                    data.templates = (data.templates || []).filter(t => t.id !== sub.threeDhTemplateId);
+                }
+                sub.threeDhDeviceId = null;
+                sub.threeDhTemplateId = null;
+            }
+
             // Telegram notification
             if (global.happBot) {
                 const s = data.settings || {};
@@ -829,9 +845,9 @@ function checkExpiredSubscriptions() {
 }
 
 // Check every hour
-setInterval(checkExpiredSubscriptions, 3600000);
+setInterval(() => checkExpiredSubscriptions().catch(e => console.log('checkExpiredSubscriptions error:', e.message)), 3600000);
 // Also check on startup after 15 seconds
-setTimeout(checkExpiredSubscriptions, 15000);
+setTimeout(() => checkExpiredSubscriptions().catch(e => console.log('checkExpiredSubscriptions error:', e.message)), 15000);
 
 // ===== EXPIRATION NOTIFICATIONS =====
 function checkExpirationNotifications() {
@@ -1450,6 +1466,28 @@ async function createThreeDhDevice(settings, order, plan) {
         sourceUrl: resolved.sourceUrl || extracted.url || '',
         configs: resolved.uris
     };
+}
+
+async function deleteThreeDhDevice(settings, deviceId) {
+    if (!deviceId) return false;
+    if (!isThreeDhConfigured(settings)) return false;
+    try {
+        const jar = await threeDhLogin(settings);
+        const listResp = await threeDhRequest('GET', '/vpn/', null, jar);
+        const csrfMatch = String(listResp.body).match(/<input[^>]+name=["']csrf_token["'][^>]+value=["']([^"']+)["']/i);
+        const csrfToken = csrfMatch ? csrfMatch[1] : '';
+        const payload = new URLSearchParams({ csrf_token: csrfToken }).toString();
+        const delResp = await threeDhRequest('POST', `/vpn/delete/${deviceId}`, payload, jar, {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Origin: 'https://ru.3dh.live',
+            Referer: 'https://ru.3dh.live/vpn/'
+        });
+        console.log(`3DH delete device ${deviceId}: HTTP ${delResp.statusCode}`);
+        return delResp.statusCode < 400;
+    } catch (e) {
+        console.log(`3DH delete device ${deviceId} error: ${e.message}`);
+        return false;
+    }
 }
 
 function mergeIds(...lists) {

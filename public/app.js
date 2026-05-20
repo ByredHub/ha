@@ -1,6 +1,8 @@
 // ===== HappVPN v3.1 =====
-(function () {
-    'use strict';
+(
+    
+    
+    function () {    'use strict';
     let templates = [], subs = [], settings = {}, plans = [], currentSub = null, shopUsers = [], currentUserId = null, mtproxies = [], waproxies = [];
     const $ = sel => document.querySelector(sel);
     const $$ = sel => document.querySelectorAll(sel);

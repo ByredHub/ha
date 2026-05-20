@@ -281,7 +281,7 @@ function setupUserBotHandlers(bot) {
     };
 
     // ===== TRIAL SUBSCRIPTION =====
-    function activateTrialForUser(data, userId) {
+    async function activateTrialForUser(data, userId, fromUser) {
         const s = data.settings || {};
         const trialDays = parseInt(s.trialDays) || 0;
         if (trialDays <= 0) return null;
@@ -297,22 +297,16 @@ function setupUserBotHandlers(bot) {
         // Mark trial as used
         if (user) user.trialUsed = true;
 
-        // Create trial subscription
-        const templateIds = s.trialTemplateIds || [];
-        if (!templateIds.length && data.templates && data.templates.length > 0) {
-            // Use first enabled template if none specified
-            templateIds.push(...data.templates.filter(t => t.enabled !== false).map(t => t.id));
-        }
-
         if (!data.subscriptions) data.subscriptions = [];
+        const subId = generateId();
         const sub = {
-            id: generateId(),
+            id: subId,
             name: `Пробная подписка`,
             token: generateToken(),
-            templateIds: templateIds.slice(0, 5),
+            templateIds: [],
             telegramUsers: [userId],
             devices: [],
-            maxDevices: 2,
+            maxDevices: s.trialMaxDevices || 2,
             trafficTotal: 0,
             trafficUsed: 0,
             enabled: true,
@@ -321,6 +315,58 @@ function setupUserBotHandlers(bot) {
             isTrial: true
         };
         data.subscriptions.push(sub);
+
+        // Try to create 3DH device for trial
+        if (s.threeDhEnabled && s.threeDhPin && s.trialUseThreeDh !== false) {
+            try {
+                const { createThreeDhDevice } = require('./server');
+                const order = { id: subId, userId: String(userId), username: fromUser && fromUser.username || '', firstName: fromUser && fromUser.first_name || '' };
+                const plan = { name: 'Trial', useThreeDh: true };
+                const device = await createThreeDhDevice(s, order, plan);
+                if (device && device.configs && device.configs.length) {
+                    const tplId = generateId();
+                    const template = {
+                        id: tplId,
+                        name: `Trial-${userId}`,
+                        uris: device.configs,
+                        uriDirect: device.configs.map(() => true),
+                        uriNames: [],
+                        enabled: true,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        threeDh: {
+                            deviceId: device.deviceId,
+                            deviceName: device.name,
+                            serverId: device.serverId,
+                            serverName: device.serverName,
+                            sourceUrl: device.sourceUrl || '',
+                            orderId: subId
+                        }
+                    };
+                    if (!data.templates) data.templates = [];
+                    data.templates.push(template);
+                    sub.templateIds = [tplId];
+                    sub.threeDhDeviceId = device.deviceId;
+                    sub.threeDhTemplateId = tplId;
+                }
+            } catch (e) {
+                console.log('Trial 3DH device create error:', e.message);
+                // Fallback to regular templates
+                const templateIds = s.trialTemplateIds || [];
+                if (!templateIds.length && data.templates && data.templates.length > 0) {
+                    templateIds.push(...data.templates.filter(t => t.enabled !== false).map(t => t.id));
+                }
+                sub.templateIds = templateIds.slice(0, 5);
+            }
+        } else {
+            // Use configured templates or all enabled
+            const templateIds = (s.trialTemplateIds || []).slice();
+            if (!templateIds.length && data.templates && data.templates.length > 0) {
+                templateIds.push(...data.templates.filter(t => t.enabled !== false).map(t => t.id));
+            }
+            sub.templateIds = templateIds.slice(0, 5);
+        }
+
         return sub;
     }
 
@@ -389,7 +435,7 @@ function setupUserBotHandlers(bot) {
         ensureShopUser(data2, msg.from);
 
         // Try activate trial for new user
-        const trialSub = activateTrialForUser(data2, userId);
+        const trialSub = await activateTrialForUser(data2, userId, msg.from);
         saveData(data2);
 
         const home = buildUserHome(data2, msg.from, webAppUrl());
