@@ -351,12 +351,6 @@ function setupUserBotHandlers(bot) {
                 }
             } catch (e) {
                 console.log('Trial 3DH device create error:', e.message);
-                // Fallback to regular templates
-                const templateIds = s.trialTemplateIds || [];
-                if (!templateIds.length && data.templates && data.templates.length > 0) {
-                    templateIds.push(...data.templates.filter(t => t.enabled !== false).map(t => t.id));
-                }
-                sub.templateIds = templateIds.slice(0, 5);
             }
         } else {
             // Use configured templates or all enabled
