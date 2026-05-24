@@ -479,12 +479,17 @@
             const isExpired = sub.expiresAt && Date.now() > sub.expiresAt;
             const isDisabled = sub.enabled === false;
             const statusClass = isDisabled ? 'disabled' : isExpired ? 'expired' : 'active';
+            const isTrial = sub.isTrial;
+            const is3dh = sub.threeDhDeviceId;
 
             return `<div class="sub-card ${statusClass}" style="animation-delay:${i * 0.04}s">
                 <div class="sub-card-top">
                     <div class="sub-status-dot ${statusClass}"></div>
-                    <div class="sub-card-name">${escapeHtml(sub.name || '—')}</div>
+                    <div class="sub-card-name">${escapeHtml(sub.name || '—')} ${isTrial ? '<span class="trial-badge">🧪 TRIAL</span>' : ''}</div>
                     <div class="sub-card-actions">
+                        ${isTrial ? `
+                            <button class="btn-icon" data-switch-template="${sub.id}" title="Switch template"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
+                        ` : ''}
                         <button class="btn-icon" data-toggle-sub="${sub.id}" title="${isDisabled ? 'Вкл' : 'Выкл'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 11-12.73 0M12 2v10"/></svg></button>
                         <button class="btn-icon" data-edit-sub="${sub.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
                         <button class="btn-icon" data-del-sub="${sub.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
@@ -527,7 +532,49 @@
             await api('PUT', `/api/subs/${s.id}`, { enabled: s.enabled === false ? true : false });
             await loadAll(); showToast(s.enabled === false ? 'Включена' : 'Выключена', 'success');
         }));
+        list.querySelectorAll('[data-switch-template]').forEach(b => b.addEventListener('click', async e => { e.stopPropagation(); switchTrialTemplate(b.dataset.switchTemplate); }));
         list.querySelectorAll('[data-happ-link]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); getHappLink(b.dataset.happLink); }));
+        
+        // Show/hide delete trials button
+        const hasTrials = subs.some(sub => sub.isTrial);
+        const deleteBtn = $('#btnDeleteTrials');
+        if (deleteBtn) {
+            deleteBtn.style.display = hasTrials ? 'flex' : 'none';
+        }
+    }
+
+    // Delete all trial subscriptions
+    async function deleteAllTrials() {
+        const trialCount = subs.filter(sub => sub.isTrial).length;
+        if (trialCount === 0) {
+            showToast('Нет пробных подписок для удаления', 'info');
+            return;
+        }
+
+        const confirmed = await showConfirm(
+            `Удалить все пробные подписки?`,
+            `Будет удалено ${trialCount} пробных подписок и связанные шаблоны. Это действие нельзя отменить.`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const btn = $('#btnDeleteTrials');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg><span>Удаление...</span>';
+
+            const res = await api('DELETE', '/api/trials');
+            
+            showToast(res.message || 'Пробные подписки удалены', 'success');
+            await loadAll();
+            
+        } catch (error) {
+            showToast('Ошибка: ' + error.message, 'error');
+            const btn = $('#btnDeleteTrials');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 
     // ===== SUB CRUD =====
@@ -641,7 +688,88 @@
         $('#subExpires').value = sub.expiresAt ? new Date(sub.expiresAt).toISOString().split('T')[0] : '';
         $('#subNotes').value = sub.notes || '';
         $('#subEditId').value = sub.id; $('#modalSubTitle').textContent = 'Редактировать'; $('#btnSaveSub').textContent = 'Сохранить';
-        openModal('modalAddSub');
+
+    async function switchTrialTemplate(subId) {
+        const sub = subs.find(s => s.id === subId);
+        if (!sub || !sub.isTrial) {
+            showToast('Только для пробных подписок', 'error');
+            return;
+        }
+
+        const is3dh = sub.threeDhDeviceId;
+        const non3dhTemplates = templates.filter(t => !t.threeDh && t.enabled !== false);
+        
+        let options = '';
+        if (!is3dh) {
+            options += `<button class="template-option" data-type="3dh">🔐 Переключить на 3DH</button>`;
+        }
+        if (non3dhTemplates.length > 0) {
+            options += `<button class="template-option" data-type="custom">📋 Использовать мой шаблон</button>`;
+        }
+        options += `<button class="template-option" data-type="default">🔄 Вернуть к стандартным</button>`;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.innerHTML = `
+            <div class="confirm-dialog" style="max-width:400px">
+                <div class="confirm-header">
+                    <h3>Переключить шаблон пробной подписки</h3>
+                    <p>Текущий: ${is3dh ? '🔐 3DH' : '📋 Стандартный'}</p>
+                </div>
+                <div class="confirm-content">
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        ${options}
+                    </div>
+                    <div id="customTemplateSelect" style="display:none;margin-top:12px">
+                        <label style="font-size:0.9rem;color:var(--text-secondary)">Выберите шаблон:</label>
+                        <select id="customTemplateDropdown" style="width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid var(--border)">
+                            ${non3dhTemplates.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div class="confirm-actions">
+                    <button class="btn-cancel" style="width:100%">Отмена</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        // Close handlers
+        overlay.querySelector('.btn-cancel').onclick = () => overlay.remove();
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+        // Template option handlers
+        overlay.querySelectorAll('.template-option').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const type = btn.dataset.type;
+                let templateId = null;
+
+                if (type === 'custom') {
+                    const selectDiv = overlay.querySelector('#customTemplateSelect');
+                    if (selectDiv.style.display === 'none') {
+                        selectDiv.style.display = 'block';
+                        return;
+                    }
+                    templateId = overlay.querySelector('#customTemplateDropdown').value;
+                }
+
+                try {
+                    btn.disabled = true;
+                    btn.textContent = '...';
+                    
+                    const res = await api('POST', `/api/subs/${subId}/switch-template`, { templateType: type, templateId });
+                    
+                    showToast(res.message || 'Шаблон изменен', 'success');
+                    overlay.remove();
+                    await loadAll();
+                } catch (err) {
+                    showToast(err.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = btn.dataset.type === '3dh' ? '🔐 Переключить на 3DH' : 
+                                   btn.dataset.type === 'custom' ? '📋 Использовать мой шаблон' : '🔄 Вернуть к стандартным';
+                }
+            });
+        });
     }
 
     async function handleSaveSub() {
@@ -1110,6 +1238,7 @@
         // Subs
         $('#btnAddSub').addEventListener('click', openCreateSub);
         $('#btnSaveSub').addEventListener('click', handleSaveSub);
+        $('#btnDeleteTrials').addEventListener('click', deleteAllTrials);
         $('#searchSubs').addEventListener('input', e => renderSubs(e.target.value));
 
         // Detail

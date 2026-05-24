@@ -2494,6 +2494,99 @@ app.post('/api/subs/:id/regenerate', authMiddleware, (req, res) => {
     res.json(data.subscriptions[idx]);
 });
 
+// Switch trial subscription template
+app.post('/api/subs/:id/switch-template', authMiddleware, async (req, res) => {
+    const data = loadData();
+    const idx = (data.subscriptions || []).findIndex(s => s.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Not found' });
+    
+    const sub = data.subscriptions[idx];
+    if (!sub.isTrial) return res.status(400).json({ error: 'Not a trial subscription' });
+    
+    const { templateType, templateId } = req.body;
+    const settings = data.settings || {};
+    
+    try {
+        // Clean up existing 3DH resources if switching away from 3DH
+        if (sub.threeDhDeviceId && templateType !== '3dh') {
+            await deleteThreeDhDevice(settings, sub.threeDhDeviceId);
+            if (sub.threeDhTemplateId) {
+                data.templates = (data.templates || []).filter(t => t.id !== sub.threeDhTemplateId);
+            }
+            sub.threeDhDeviceId = null;
+            sub.threeDhTemplateId = null;
+        }
+        
+        if (templateType === '3dh') {
+            // Switch to 3DH template
+            if (!isThreeDhConfigured(settings)) {
+                return res.status(400).json({ error: '3DH not configured' });
+            }
+            
+            if (!sub.threeDhDeviceId) {
+                // Create new 3DH device
+                const userId = (sub.telegramUsers || [])[0] || 'unknown';
+                const order = { id: sub.id, userId: String(userId), username: '', firstName: '' };
+                const plan = { name: 'Trial', useThreeDh: true };
+                
+                const device = await createThreeDhDevice(settings, order, plan);
+                if (!device) {
+                    return res.status(500).json({ error: 'Failed to create 3DH device' });
+                }
+                
+                // Create 3DH template
+                const tplId = generateId();
+                const template = {
+                    id: tplId,
+                    name: `Trial-${userId}`,
+                    uris: device.configs,
+                    uriDirect: device.configs.map(() => true),
+                    uriNames: [],
+                    enabled: true,
+                    threeDh: true,
+                    createdAt: Date.now()
+                };
+                
+                if (!data.templates) data.templates = [];
+                data.templates.push(template);
+                
+                sub.templateIds = [tplId];
+                sub.threeDhDeviceId = device.deviceId;
+                sub.threeDhTemplateId = tplId;
+            }
+        } else if (templateType === 'custom' && templateId) {
+            // Switch to custom template
+            const template = (data.templates || []).find(t => t.id === templateId);
+            if (!template) {
+                return res.status(404).json({ error: 'Template not found' });
+            }
+            
+            sub.templateIds = [templateId];
+        } else {
+            // Use default trial templates
+            const trialTemplateIds = (settings.trialTemplateIds || []).slice();
+            if (!trialTemplateIds.length && data.templates && data.templates.length > 0) {
+                trialTemplateIds.push(...data.templates.filter(t => t.enabled !== false && !t.threeDh).map(t => t.id));
+            }
+            sub.templateIds = trialTemplateIds.slice(0, 5);
+        }
+        
+        sub.updatedAt = Date.now();
+        saveData(data);
+        scheduleRelaySync();
+        
+        res.json({ 
+            ok: true, 
+            subscription: sub,
+            message: `Switched to ${templateType === '3dh' ? '3DH' : templateType === 'custom' ? 'custom' : 'default'} template`
+        });
+        
+    } catch (error) {
+        console.error('Switch template error:', error);
+        res.status(500).json({ error: 'Failed to switch template: ' + error.message });
+    }
+});
+
 // Devices
 app.get('/api/subs/:id/devices', authMiddleware, (req, res) => {
     const data = loadData();
@@ -2512,6 +2605,60 @@ app.delete('/api/subs/:id/devices/:hwid', authMiddleware, (req, res) => {
     sub.devices.splice(idx, 1);
     saveData(data);
     res.json({ ok: true });
+});
+
+// Delete all trial subscriptions
+app.delete('/api/trials', authMiddleware, async (req, res) => {
+    const data = loadData();
+    const settings = data.settings || {};
+    
+    try {
+        // Find all trial subscriptions
+        const trialSubs = (data.subscriptions || []).filter(sub => sub.isTrial);
+        
+        if (trialSubs.length === 0) {
+            return res.json({ ok: true, deleted: 0, message: 'Нет пробных подписок для удаления' });
+        }
+        
+        let deletedCount = 0;
+        const templateIdsToDelete = new Set();
+        
+        // Clean up 3DH devices and templates for trials
+        for (const sub of trialSubs) {
+            if (sub.threeDhDeviceId) {
+                try {
+                    await deleteThreeDhDevice(settings, sub.threeDhDeviceId);
+                } catch (e) {
+                    console.log(`Failed to delete 3DH device ${sub.threeDhDeviceId}:`, e.message);
+                }
+            }
+            if (sub.threeDhTemplateId) {
+                templateIdsToDelete.add(sub.threeDhTemplateId);
+            }
+            deletedCount++;
+        }
+        
+        // Remove trial subscriptions
+        data.subscriptions = (data.subscriptions || []).filter(sub => !sub.isTrial);
+        
+        // Remove trial templates
+        if (templateIdsToDelete.size > 0) {
+            data.templates = (data.templates || []).filter(t => !templateIdsToDelete.has(t.id));
+        }
+        
+        saveData(data);
+        scheduleRelaySync();
+        
+        res.json({ 
+            ok: true, 
+            deleted: deletedCount,
+            message: `Удалено ${deletedCount} пробных подписок`
+        });
+        
+    } catch (error) {
+        console.error('Delete trials error:', error);
+        res.status(500).json({ error: 'Failed to delete trials: ' + error.message });
+    }
 });
 
 app.delete('/api/subs/:id/devices', authMiddleware, (req, res) => {
