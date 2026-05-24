@@ -2361,6 +2361,39 @@ app.put('/api/templates/:id', authMiddleware, (req, res) => {
     res.json(data.templates[idx]);
 });
 
+// Delete all trial templates + their subscriptions + 3DH devices
+app.delete('/api/templates/trials', authMiddleware, async (req, res) => {
+    const data = loadData();
+    const settings = data.settings || {};
+    
+    const trialTpls = (data.templates || []).filter(t => /^Trial-\d+$/.test(t.name));
+    const trialTplIds = new Set(trialTpls.map(t => t.id));
+    
+    if (trialTplIds.size === 0) {
+        return res.json({ ok: true, deletedTemplates: 0, deletedSubs: 0 });
+    }
+    
+    const trialSubs = (data.subscriptions || []).filter(sub => 
+        sub.isTrial && (sub.templateIds || []).some(id => trialTplIds.has(id))
+    );
+    
+    for (const sub of trialSubs) {
+        if (sub.threeDhDeviceId) {
+            try { await deleteThreeDhDevice(settings, sub.threeDhDeviceId); }
+            catch (e) { console.log(`3DH cleanup error: ${e.message}`); }
+        }
+    }
+    
+    const trialSubIds = new Set(trialSubs.map(s => s.id));
+    data.templates = (data.templates || []).filter(t => !trialTplIds.has(t.id));
+    data.subscriptions = (data.subscriptions || []).filter(s => !trialSubIds.has(s.id));
+    
+    saveData(data);
+    scheduleRelaySync();
+    
+    res.json({ ok: true, deletedTemplates: trialTplIds.size, deletedSubs: trialSubIds.size });
+});
+
 app.delete('/api/templates/:id', authMiddleware, (req, res) => {
     const data = loadData();
     const idx = (data.templates || []).findIndex(t => t.id === req.params.id);
@@ -2405,48 +2438,6 @@ app.post('/api/templates/:id/remove-all', authMiddleware, (req, res) => {
     saveData(data);
     scheduleRelaySync();
     res.json({ ok: true, count });
-});
-
-// Delete all trial templates + their subscriptions + 3DH devices
-app.delete('/api/templates/trials', authMiddleware, async (req, res) => {
-    const data = loadData();
-    const settings = data.settings || {};
-    
-    // Find trial templates (name starts with "Trial-")
-    const trialTpls = (data.templates || []).filter(t => /^Trial-\d+$/.test(t.name));
-    const trialTplIds = new Set(trialTpls.map(t => t.id));
-    
-    if (trialTplIds.size === 0) {
-        return res.json({ ok: true, deletedTemplates: 0, deletedSubs: 0 });
-    }
-    
-    // Find trial subscriptions linked to these templates
-    const trialSubs = (data.subscriptions || []).filter(sub => 
-        sub.isTrial && (sub.templateIds || []).some(id => trialTplIds.has(id))
-    );
-    
-    // Clean up 3DH devices
-    for (const sub of trialSubs) {
-        if (sub.threeDhDeviceId) {
-            try { await deleteThreeDhDevice(settings, sub.threeDhDeviceId); }
-            catch (e) { console.log(`3DH cleanup error: ${e.message}`); }
-        }
-    }
-    
-    const trialSubIds = new Set(trialSubs.map(s => s.id));
-    
-    // Remove templates and subscriptions
-    data.templates = (data.templates || []).filter(t => !trialTplIds.has(t.id));
-    data.subscriptions = (data.subscriptions || []).filter(s => !trialSubIds.has(s.id));
-    
-    saveData(data);
-    scheduleRelaySync();
-    
-    res.json({ 
-        ok: true, 
-        deletedTemplates: trialTplIds.size, 
-        deletedSubs: trialSubIds.size 
-    });
 });
 
 // Subscriptions
