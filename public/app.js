@@ -933,6 +933,14 @@
     }
 
     // ===== SETTINGS =====
+    function updateTrialModeUI() {
+        const mode = $('#settingTrialMode');
+        const group = $('#trialTemplateGroup');
+        if (mode && group) {
+            group.style.display = mode.value === 'template' ? 'block' : 'none';
+        }
+    }
+
     function loadSettingsUI() {
         $('#settingTitle').value = settings.title || ''; $('#settingDesc').value = settings.description || '';
         $('#settingSupportUrl').value = settings.supportUrl || ''; $('#settingWebsite').value = settings.website || '';
@@ -1007,6 +1015,17 @@
         if ($('#settingRequiredChannels')) $('#settingRequiredChannels').value = settings.requiredChannels || '';
         if ($('#settingReferralBonusRub')) $('#settingReferralBonusRub').value = settings.referralBonusRub || 40;
         if ($('#settingTrialDays')) $('#settingTrialDays').value = settings.trialDays || 0;
+        if ($('#settingTrialMode')) {
+            $('#settingTrialMode').value = settings.trialUseThreeDh === false ? 'template' : '3dh';
+            updateTrialModeUI();
+        }
+        if ($('#settingTrialTemplateId')) {
+            const non3dh = templates.filter(t => !t.threeDh && t.enabled !== false && !/^Trial-\d+$/.test(t.name));
+            $('#settingTrialTemplateId').innerHTML = non3dh.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${(t.uris||[]).length})</option>`).join('');
+            if (settings.trialTemplateIds && settings.trialTemplateIds.length) {
+                $('#settingTrialTemplateId').value = settings.trialTemplateIds[0];
+            }
+        }
         if ($('#settingExpireNotifyDays')) $('#settingExpireNotifyDays').value = (settings.expireNotifyDays || [3, 2, 1]).join(',');
         if ($('#settingExpireNotifyAfter')) $('#settingExpireNotifyAfter').checked = settings.expireNotifyAfter !== false;
         if ($('#settingAppLinkHappIos')) $('#settingAppLinkHappIos').value = settings.appLinks?.happIos || '';
@@ -1075,6 +1094,8 @@
             requiredChannels: $('#settingRequiredChannels') ? $('#settingRequiredChannels').value.trim() : '',
             referralBonusRub: $('#settingReferralBonusRub') ? parseInt($('#settingReferralBonusRub').value) || 40 : 40,
             trialDays: $('#settingTrialDays') ? parseInt($('#settingTrialDays').value) || 0 : 0,
+            trialUseThreeDh: $('#settingTrialMode') ? $('#settingTrialMode').value === '3dh' : true,
+            trialTemplateIds: $('#settingTrialTemplateId') && $('#settingTrialMode') && $('#settingTrialMode').value === 'template' ? [$('#settingTrialTemplateId').value].filter(Boolean) : [],
             expireNotifyDays: $('#settingExpireNotifyDays') ? $('#settingExpireNotifyDays').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : [3, 2, 1],
             expireNotifyAfter: $('#settingExpireNotifyAfter') ? $('#settingExpireNotifyAfter').checked : true,
             appLinks: {
@@ -1264,6 +1285,7 @@
         $('#btnSaveTpl').addEventListener('click', handleSaveTemplate);
         $('#btnDeleteTrialTpls').addEventListener('click', deleteAllTrialTemplates);
         $('#searchTemplates').addEventListener('input', e => renderTemplates(e.target.value));
+        if ($('#settingTrialMode')) $('#settingTrialMode').addEventListener('change', updateTrialModeUI);
 
         // Subs
         $('#btnAddSub').addEventListener('click', openCreateSub);

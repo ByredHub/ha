@@ -751,6 +751,19 @@
                                 style="max-width:120px">
                             <p class="hint">0 = без пробной подписки</p>
                         </div>
+                        <div class="form-group"><label for="settingTrialMode">Режим пробной подписки</label>
+                            <select id="settingTrialMode" class="form-input" style="max-width:300px">
+                                <option value="3dh">🔐 3DH (индивидуальное устройство)</option>
+                                <option value="template">📋 Мой шаблон</option>
+                            </select>
+                            <p class="hint">3DH = создаёт устройство для каждого пользователя. Мой шаблон = общий шаблон для всех.</p>
+                        </div>
+                        <div class="form-group" id="trialTemplateGroup" style="display:none">
+                            <label for="settingTrialTemplateId">Шаблон для пробных</label>
+                            <select id="settingTrialTemplateId" class="form-input" style="max-width:300px">
+                            </select>
+                            <p class="hint">Выберите шаблон, который будет выдаваться пробным пользователям</p>
+                        </div>
                         <div class="form-group"><label for="settingExpireNotifyDays">Уведомления об окончании
                                 (дни)</label><input type="text" id="settingExpireNotifyDays" placeholder="3,2,1"
                                 class="form-input" style="max-width:200px">
