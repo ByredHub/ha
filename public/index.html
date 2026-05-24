@@ -226,11 +226,19 @@
             <!-- Templates Tab -->
             <section class="tab-panel" id="tab-templates">
                 <div class="section-header">
-                    <h2>Шаблоны серверов</h2><button class="btn-primary" id="btnAddTpl"><svg viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg><span>Добавить</span></button>
+                    <h2>Шаблоны серверов</h2>
+                    <div style="display:flex;gap:8px">
+                        <button class="btn-outline btn-danger" id="btnDeleteTrialTpls" style="display:none"><svg viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            </svg><span>Удалить Trial</span></button>
+                        <button class="btn-primary" id="btnAddTpl"><svg viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg><span>Добавить</span></button>
+                    </div>
                 </div>
                 <div class="search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8" />

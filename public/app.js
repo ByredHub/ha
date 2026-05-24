@@ -251,6 +251,11 @@
             e.stopPropagation();
             pingServer(b.dataset.pingTpl, parseInt(b.dataset.pingIdx));
         }));
+        
+        // Show/hide delete trial templates button
+        const trialTplCount = templates.filter(t => /^Trial-\d+$/.test(t.name)).length;
+        const delTrialBtn = $('#btnDeleteTrialTpls');
+        if (delTrialBtn) delTrialBtn.style.display = trialTplCount > 0 ? 'flex' : 'none';
     }
 
     async function pingUri(tplId, idx) {
@@ -574,6 +579,28 @@
             const btn = $('#btnDeleteTrials');
             btn.disabled = false;
             btn.innerHTML = originalText;
+        }
+    }
+
+    // Delete all trial templates
+    async function deleteAllTrialTemplates() {
+        const trialCount = templates.filter(t => /^Trial-\d+$/.test(t.name)).length;
+        if (trialCount === 0) { showToast('Нет Trial шаблонов', 'info'); return; }
+
+        if (!await showConfirm(`Удалить ${trialCount} Trial шаблонов?`, 'Также будут удалены связанные пробные подписки и 3DH устройства.')) return;
+
+        try {
+            const btn = $('#btnDeleteTrialTpls');
+            btn.disabled = true;
+            btn.querySelector('span').textContent = 'Удаление...';
+            const res = await api('DELETE', '/api/templates/trials');
+            showToast(`Удалено ${res.deletedTemplates} шаблонов, ${res.deletedSubs} подписок`, 'success');
+            await loadAll();
+        } catch (e) {
+            showToast('Ошибка: ' + e.message, 'error');
+            const btn = $('#btnDeleteTrialTpls');
+            btn.disabled = false;
+            btn.querySelector('span').textContent = 'Удалить Trial';
         }
     }
 
@@ -1235,6 +1262,7 @@
         // Templates
         $('#btnAddTpl').addEventListener('click', () => { resetTplForm(); openModal('modalAddTpl'); });
         $('#btnSaveTpl').addEventListener('click', handleSaveTemplate);
+        $('#btnDeleteTrialTpls').addEventListener('click', deleteAllTrialTemplates);
         $('#searchTemplates').addEventListener('input', e => renderTemplates(e.target.value));
 
         // Subs
