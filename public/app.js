@@ -688,6 +688,8 @@
         $('#subExpires').value = sub.expiresAt ? new Date(sub.expiresAt).toISOString().split('T')[0] : '';
         $('#subNotes').value = sub.notes || '';
         $('#subEditId').value = sub.id; $('#modalSubTitle').textContent = 'Редактировать'; $('#btnSaveSub').textContent = 'Сохранить';
+        openModal('modalAddSub');
+    }
 
     async function switchTrialTemplate(subId) {
         const sub = subs.find(s => s.id === subId);
