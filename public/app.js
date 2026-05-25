@@ -1901,6 +1901,14 @@
         // Balance input
         $('#userBalanceInput').value = u.balance || 0;
 
+        // Fill template dropdown
+        const tplSelect = $('#userSubTemplateId');
+        if (tplSelect) {
+            const nonTrialTpls = templates.filter(t => t.enabled !== false && !/^Trial-\d+$/.test(t.name) && !t.threeDh);
+            tplSelect.innerHTML = '<option value="">— Все активные шаблоны —</option>' +
+                nonTrialTpls.map(t => `<option value="${t.id}">${escapeHtml(t.name)} (${(t.uris||[]).length})</option>`).join('');
+        }
+
         // User subs
         if (userSubs.length === 0) {
             $('#userSubsList').innerHTML = '<div class="empty-hint">Нет подписок</div>';
@@ -1962,8 +1970,10 @@
     async function assignSubDays(days) {
         if (!currentUserId || !days || days <= 0) { showToast('Введите кол-во дней', 'error'); return; }
         try {
-            await api('POST', `/api/shop-users/${currentUserId}/assign-sub`, { days });
-            showToast(`Подписка +${days} дней`, 'success');
+            const templateId = $('#userSubTemplateId') ? $('#userSubTemplateId').value : '';
+            await api('POST', `/api/shop-users/${currentUserId}/assign-sub`, { days, templateId: templateId || undefined });
+            const tplName = templateId ? (templates.find(t => t.id === templateId) || {}).name : '';
+            showToast(`Подписка +${days} дней${tplName ? ' (' + tplName + ')' : ''}`, 'success');
             await loadAll();
             openUserProfile(currentUserId);
         } catch (e) { showToast(e.message, 'error'); }

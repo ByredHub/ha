@@ -4062,15 +4062,23 @@ app.post('/api/broadcast', authMiddleware, async (req, res) => {
 
 // Assign subscription to user
 app.post('/api/shop-users/:id/assign-sub', authMiddleware, (req, res) => {
-    const { days } = req.body;
+    const { days, templateId } = req.body;
     if (!days || days <= 0) return res.status(400).json({ error: 'Missing days' });
     const userId = parseInt(req.params.id);
     const data = loadData();
-    const tplIds = (data.templates || []).filter(t => t.enabled !== false).map(t => t.id);
+    // Use specified template or all active non-trial templates
+    let tplIds;
+    if (templateId) {
+        const tpl = (data.templates || []).find(t => t.id === templateId);
+        if (!tpl) return res.status(400).json({ error: 'Template not found' });
+        tplIds = [templateId];
+    } else {
+        tplIds = (data.templates || []).filter(t => t.enabled !== false && !/^Trial-\d+$/.test(t.name) && !t.threeDh).map(t => t.id);
+    }
     if (tplIds.length === 0) return res.status(400).json({ error: 'No active templates' });
     if (!data.subscriptions) data.subscriptions = [];
     const existing = data.subscriptions.find(s =>
-        s.telegramUsers && s.telegramUsers.includes(userId) && s.enabled !== false
+        s.telegramUsers && s.telegramUsers.includes(userId) && s.enabled !== false && !s.isTrial
     );
     let sub;
     if (existing) {
