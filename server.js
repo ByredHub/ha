@@ -3725,8 +3725,12 @@ app.get('/api/shop/user-data', async (req, res) => {
     if (!user) {
         user = { userId, balance: 0, referralCode: generateId().substring(0, 8), referredBy: null, referralCount: 0, referralInvited: 0, referralDaysBonus: 0, balanceHistory: [], createdAt: Date.now() };
         data.shopUsers.push(user);
-        saveData(data);
     }
+    // Save name/username from Mini App init data
+    let changed = false;
+    if (req.query.firstName && req.query.firstName !== user.firstName) { user.firstName = req.query.firstName; changed = true; }
+    if (req.query.username && req.query.username !== user.username) { user.username = req.query.username; changed = true; }
+    if (changed || !user.createdAt) { user.createdAt = user.createdAt || Date.now(); saveData(data); }
 
     // Active subscription
     const mySubs = (data.subscriptions || []).filter(sub => sub.telegramUsers && sub.telegramUsers.includes(userId));

@@ -1128,7 +1128,7 @@
         (function () {
             'use strict';
             const tg = window.Telegram?.WebApp; if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#07070f'); tg.setBackgroundColor('#07070f') } catch { } }
-            const uid = tg?.initDataUnsafe?.user?.id || 0, uname = tg?.initDataUnsafe?.user?.first_name || '';
+            const uid = tg?.initDataUnsafe?.user?.id || 0, uname = tg?.initDataUnsafe?.user?.first_name || '', uhandle = tg?.initDataUnsafe?.user?.username || '';
             console.log('TG WebApp uid:', uid, 'initData:', tg?.initData ? 'present' : 'empty');
             let cfg = {}, plans = [], ud = {}, tickets = [];
             const $ = s => document.getElementById(s);
@@ -1206,7 +1206,8 @@ ${btns || '<div class="cd" style="text-align:center;color:var(--t2)">Канал�
 
             async function load() {
                 try {
-                    const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uid ? api('/api/shop/user-data?userId=' + uid) : {}]);
+                    const uparams = uid ? `userId=${uid}&firstName=${encodeURIComponent(uname)}&username=${encodeURIComponent(uhandle)}` : '';
+                    const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uparams ? api('/api/shop/user-data?' + uparams) : {}]);
                     cfg = s; plans = p; ud = u; $('hN').textContent = s.shopName || s.title || 'HappVPN'; $('hS').textContent = s.shopWelcomeShort || 'Быстрый и безопасный VPN'; if (hasRequiredGate()) renderRequiredGate(); else rH()
                 }
                 catch { $('hC').innerHTML = '<div class="emp"><div class="emp-i">' + I.shield + '</div><div class="emp-t">Ошибка загрузки</div></div>' }
@@ -1577,7 +1578,8 @@ ${t.status === 'open' ? `<div class="mg-iw"><textarea class="mg-in" id="cIn" row
             // Auto-refresh data every 15s (silent, no page reset)
             async function silentRefresh() {
                 try {
-                    const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uid ? api('/api/shop/user-data?userId=' + uid) : {}]);
+                    const uparams2 = uid ? `userId=${uid}&firstName=${encodeURIComponent(uname)}&username=${encodeURIComponent(uhandle)}` : '';
+                    const [s, p, u] = await Promise.all([api('/api/shop/settings'), api('/api/shop/plans'), uparams2 ? api('/api/shop/user-data?' + uparams2) : {}]);
                     cfg = s; plans = p; ud = u;
                     if (hasRequiredGate()) { renderRequiredGate(); return; }
                     // Re-render current active page
