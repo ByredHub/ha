@@ -1629,7 +1629,7 @@ function makePublicUrl(req, data = null) {
 function activatePlanForUser(data, plan, userId, meta = {}) {
     if (!data.subscriptions) data.subscriptions = [];
     const uid = parseInt(userId);
-    const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(uid) && s.enabled !== false);
+    const existing = data.subscriptions.find(s => s.telegramUsers && s.telegramUsers.includes(uid) && s.enabled !== false && !s.isTrial);
     const templateIds = mergeIds(plan.templateIds || [], meta.templateIds || []);
     let sub, action;
 
